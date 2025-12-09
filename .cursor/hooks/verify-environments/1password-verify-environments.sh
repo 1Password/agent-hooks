@@ -2,10 +2,6 @@
 
 set -euo pipefail
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-
 # Array of "mount_path|environment_name"
 # Mounts that are set up but not enabled in OPH.
 disabled_mounts=()
@@ -445,6 +441,96 @@ parse_toml_mounts() {
     return 1
 }
 
+# Extract the value of the `cwd` field from JSON input
+# `cwd` represents the current working directory of the project
+extract_cwd_from_json() {
+    local json_input="$1"
+    local cwd=""
+    
+    # If no JSON input was provided, return with an error
+    if [[ -z "$json_input" ]]; then
+        return 1
+    fi
+    
+    # Extract the `cwd` JSON field's value
+    cwd=$(echo "$json_input" | grep -oE '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"cwd"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || echo "")
+    
+    # Expand tilde (~) to the home directory if present in the cwd path
+    if [[ -n "$cwd" ]] && [[ "${cwd:0:1}" == "~" ]]; then
+        # Convert ~ to $HOME
+        if [[ "$cwd" == "~" ]]; then
+            cwd="$HOME"
+        elif [[ "$cwd" == "~/"* ]]; then
+            # Convert ~/path to $HOME/path
+            local path_after_tilde="${cwd:2}"
+            cwd="${HOME}/${path_after_tilde}"
+        else
+            # Convert ~user/path to $HOME/user/path
+            local current_user="${USER:-$(whoami 2>/dev/null)}"
+            if [[ "$cwd" == "~${current_user}" ]]; then
+                cwd="$HOME"
+            elif [[ "$cwd" == "~${current_user}/"* ]]; then
+                local user_len=$(( ${#current_user} + 2 ))  # ~user/
+                local path_after_user="${cwd:$user_len}"
+                cwd="${HOME}/${path_after_user}"
+            fi
+        fi
+    fi
+    
+    # Return the cwd if it's a valid directory
+    if [[ -n "$cwd" ]] && [[ -d "$cwd" ]]; then
+        echo "$cwd"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Output JSON response with permission decision
+output_response() {
+    log "Decision: $permission"
+    if [[ "$permission" == "deny" ]]; then
+        log "Agent message: $agent_message"
+        
+        agent_msg_json=$(escape_json_string "$agent_message")
+        
+        cat << EOF
+{
+  "permission": "deny",
+  "agent_message": "$agent_msg_json"
+}
+EOF
+    else
+        cat << EOF
+{
+  "permission": "allow"
+}
+EOF
+    fi
+}
+
+# Determine the project's root directory from the `cwd` field in Cursor's JSON input
+PROJECT_ROOT=""
+
+# Read the JSON input from stdin (Cursor provides this when invoking hooks)
+if [[ ! -t 0 ]]; then
+    json_input=$(cat 2>/dev/null || echo "")
+
+    if [[ -n "$json_input" ]]; then
+        cwd=$(extract_cwd_from_json "$json_input" 2>/dev/null || echo "")
+        # Find the absolute path of the project directory
+        if [[ -n "$cwd" ]]; then
+            PROJECT_ROOT=$(cd "$cwd" && pwd 2>/dev/null || echo "")
+        fi
+    fi
+fi
+
+# If the project root cannot be determined, skip environment validation and avoid blocking the user's execution.
+if [[ -z "$PROJECT_ROOT" ]]; then
+    log "Warning: Unable to determine project root from JSON input."
+    output_response
+    exit 0
+fi
 
 # Main logic: Query 1Password database and check mounts
 log "Checking for 1Password environment mounts..."
@@ -640,24 +726,5 @@ if [[ ${#all_missing_invalid[@]} -gt 0 ]] || [[ ${#disabled_mounts[@]} -gt 0 ]];
 fi
 
 # Output JSON response with permission decision
-log "Decision: $permission"
-if [[ "$permission" == "deny" ]]; then
-    log "Agent message: $agent_message"
-    
-    agent_msg_json=$(escape_json_string "$agent_message")
-    
-    cat << EOF
-{
-  "permission": "deny",
-  "agent_message": "$agent_msg_json"
-}
-EOF
-else
-    cat << EOF
-{
-  "permission": "allow"
-}
-EOF
-fi
-
+output_response
 exit 0
