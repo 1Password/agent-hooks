@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # Array of "mount_path|environment_name"
-# Local .env files that are created but not enabled in OPH.
+# Local .env files that are created but not enabled in 1Password.
 disabled_mounts=()
 
 # Array of "mount_path|environment_name"
@@ -152,19 +152,19 @@ query_mounts() {
     local db_path="$1"
     
     if ! command -v sqlite3 &> /dev/null; then
-        log "Warning: sqlite3 not found, cannot query OPH database"
+        log "Warning: sqlite3 not found, cannot query 1Password database"
         return 1
     fi
     
     # Check if database is readable
     if [[ ! -r "$db_path" ]]; then
-        log "Warning: OPH database is not readable: ${db_path}"
+        log "Warning: 1Password database is not readable: ${db_path}"
         return 1
     fi
     
     # Check if database file exists and is a valid SQLite database
     if ! sqlite3 "$db_path" "SELECT 1;" &>/dev/null; then
-        log "Warning: OPH database appears to be invalid or locked: ${db_path}"
+        log "Warning: 1Password database appears to be invalid or locked: ${db_path}"
         return 1
     fi
     
@@ -175,7 +175,7 @@ query_mounts() {
     local exit_code=$?
     
     if [[ $exit_code -ne 0 ]]; then
-        log "Warning: Failed to query OPH database (exit code: $exit_code)"
+        log "Warning: Failed to query 1Password database (exit code: $exit_code)"
         return 1
     fi
     
@@ -455,19 +455,19 @@ os_type=$(detect_os)
 if [[ "$os_type" == "unknown" ]]; then
     log "Unsupported OS, skipping remaining hook"
 else
-    log "Attempting to access OPH database..."
+    log "Attempting to access 1Password database..."
 
     db_path=$(find_1password_db "$os_type")
     if [[ -z "$db_path" ]]; then
-        log "OPH database not found, skipping remaining hook"
+        log "1Password database not found, skipping remaining hook"
     else
-        log "OPH database found: $db_path"
+        log "1Password database found: $db_path"
 
         # Query for mounts
         mount_hex_data=$(query_mounts "$db_path")
 
         if [[ -z "$mount_hex_data" ]]; then
-            log "No local .env files found in OPH database, skipping remaining hook"
+            log "No local .env files found in 1Password database, skipping remaining hook"
         else
             log "Environment mount data found, checking relevant local .env files..."
 
