@@ -329,8 +329,76 @@ parse_mount() {
 # TOML PARSING FUNCTIONS
 # ============================================================================
 
+# Remove comments and trim whitespace from a TOML line
+normalize_toml_line() {
+    local line="$1"
+    
+    # Remove comments (everything after #)
+    line="${line%%#*}"
+    # Trim leading/trailing whitespace
+    line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    
+    echo "$line"
+}
+
+# Check to see if a line is a specific section header
+check_toml_section_header() {
+    local line="$1"
+    local expected_header="$2"
+    
+    if [[ "$line" =~ ^\[\[${expected_header}\]\] ]]; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Check if TOML file has a mounts field defined
+# Returns 0 if mounts field exists, 1 otherwise
+has_toml_mounts_field() {
+    local toml_file="$1"
+    
+    # Check for TOML configuration
+    if [[ ! -f "$toml_file" ]]; then
+        return 1
+    fi
+    
+    local in_environments_section=false
+    
+    while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
+        local line
+        line=$(normalize_toml_line "$raw_line")
+        
+        # Skip empty lines
+        [[ -z "$line" ]] && continue
+        
+        # Check if the line is the expected section header
+        if check_toml_section_header "$line" "environments"; then
+            in_environments_section=true
+            continue
+        fi
+        
+        # If another section header is found, we're no longer in environments
+        if [[ "$line" =~ ^\[\[.*\]\] ]] || [[ "$line" =~ ^\[.*\] ]]; then
+            in_environments_section=false
+            continue
+        fi
+        
+        if [[ "$in_environments_section" == "true" ]]; then
+            # Detect 'mounts' field regardless of single-line or multi-line array
+            if [[ "$line" =~ ^mounts[[:space:]]*= ]]; then
+                return 0
+            fi
+        fi
+    done < "$toml_file"
+    
+    return 1
+}
+
 # Parse TOML file and extract mount paths from environments entries
 # Returns newline-separated list of mount paths
+# Returns empty string (but exit code 0) if mounts = []
+# Returns exit code 1 if mounts field doesn't exist
 parse_toml_mounts() {
     local toml_file="$1"
     
@@ -345,40 +413,41 @@ parse_toml_mounts() {
     #     ".env",
     #     "billing.env"
     #   ]
-    local in_environments=false
+    #   mounts = []
+    local in_environments_section=false
     local in_mounts_array=false
     local mount_paths=""
     local array_content=""
+    local found_mounts_field=false
     
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        # Remove comments (everything after #)
-        line="${line%%#*}"
-        # Trim leading/trailing whitespace
-        line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
+        local line
+        line=$(normalize_toml_line "$raw_line")
         
         # Skip empty lines
         [[ -z "$line" ]] && continue
         
-        # Check if we're entering an environments section
-        if [[ "$line" =~ ^\[\[environments\]\] ]]; then
-            in_environments=true
+        # Check if the line is the expected section header
+        if check_toml_section_header "$line" "environments"; then
+            in_environments_section=true
             in_mounts_array=false
             array_content=""
             continue
         fi
         
-        # If we hit another section header, we're no longer in environments
+        # If another section header is found, we're no longer in environments
         if [[ "$line" =~ ^\[\[.*\]\] ]] || [[ "$line" =~ ^\[.*\] ]]; then
-            in_environments=false
+            in_environments_section=false
             in_mounts_array=false
             array_content=""
             continue
         fi
         
         # Only process if we're in an environments section
-        if [[ "$in_environments" == "true" ]]; then
+        if [[ "$in_environments_section" == "true" ]]; then
             # Check for mounts = [...] on a single line
             if [[ "$line" =~ ^mounts[[:space:]]*=[[:space:]]*\[.*\] ]]; then
+                found_mounts_field=true
                 # Extract content between [ and ]
                 local array_part="${line#*\[}"
                 array_part="${array_part%\]*}"
@@ -394,6 +463,7 @@ parse_toml_mounts() {
                 done
             # Check for mounts = [ (multi-line array start)
             elif [[ "$line" =~ ^mounts[[:space:]]*=[[:space:]]*\[ ]]; then
+                found_mounts_field=true
                 in_mounts_array=true
                 # Extract any content after the opening [
                 array_content="${line#*\[}"
@@ -432,13 +502,16 @@ parse_toml_mounts() {
         fi
     done < "$toml_file"
     
-    # Remove trailing newline and return
-    if [[ -n "$mount_paths" ]]; then
-        mount_paths=$(echo "$mount_paths" | sed '/^$/d')
+    # If mounts field was found, return success (even if empty)
+    if [[ "$found_mounts_field" == "true" ]]; then
+        # Remove trailing newline and return
         if [[ -n "$mount_paths" ]]; then
-            echo "$mount_paths"
-            return 0
+            mount_paths=$(echo "$mount_paths" | sed '/^$/d')
+            if [[ -n "$mount_paths" ]]; then
+                echo "$mount_paths"
+            fi
         fi
+        return 0
     fi
     
     return 1
@@ -452,102 +525,198 @@ parse_toml_mounts() {
 log "Checking for local .env files mounted by 1Password..."
 log "Project root: $PROJECT_ROOT"
 
-os_type=$(detect_os)
+# Check for TOML configuration first
+toml_file="${PROJECT_ROOT}/.1password/environments.toml"
+toml_override_mode=false
+toml_paths_array=()  # Initialize array to avoid unbound variable errors with set -u
 
-if [[ "$os_type" == "unknown" ]]; then
-    log "Unsupported OS, skipping remaining hook"
-else
-    log "Attempting to access 1Password database..."
-
-    db_path=$(find_1password_db "$os_type")
-    if [[ -z "$db_path" ]]; then
-        log "1Password database not found, skipping remaining hook"
-    else
-        log "1Password database found: $db_path"
-
-        # Query for mounts
-        mount_hex_data=$(query_mounts "$db_path")
-
-        if [[ -z "$mount_hex_data" ]]; then
-            log "No local .env files found in 1Password database, skipping remaining hook"
-        else
-            log "Environment mount data found, checking relevant local .env files..."
-
-            # Process each mount entry
-            while IFS= read -r hex_line || [[ -n "$hex_line" ]]; do
-                [[ -z "$hex_line" ]] && continue
+if [[ -f "$toml_file" ]]; then
+    log "Found environments.toml, checking for mounts field..."
+    
+    # Check if TOML has mounts field defined
+    if has_toml_mounts_field "$toml_file"; then
+        log "environments.toml has mounts field defined - using TOML-only validation mode"
+        toml_override_mode=true
+        
+        # Parse and validate TOML mounts
+        toml_mounts=$(parse_toml_mounts "$toml_file")
+        if [[ $? -eq 0 ]]; then
+            if [[ -z "$toml_mounts" ]]; then
+                log "environments.toml specifies mounts = [] - no local .env files to validate"
+            else
+                log "Validating local .env files specified in environments.toml..."
                 
-                mount_info=$(parse_mount "$hex_line")
-                if [[ -n "$mount_info" ]]; then
-                    # Parse mount_info: mount_path|is_enabled|environment_name|uuid|environment_uuid
-                    mount_path="${mount_info%%|*}"
-                    remaining="${mount_info#*|}"
-                    is_enabled="${remaining%%|*}"
-                    remaining="${remaining#*|}"
-                    environment_name="${remaining%%|*}"
-                    remaining="${remaining#*|}"
-                    uuid="${remaining%%|*}"
-                    environment_uuid="${remaining#*|}"
-                    
-                    log "Checking local .env file with id ${uuid} at path \"${mount_path}\" for environment ${environment_uuid} (${environment_name})"
-
-                    # Check if this mount is relevant to the current project
-                    if ! is_project_mount "$mount_path" "$PROJECT_ROOT"; then
-                        log "Local .env file does not belong to the current project, skipping"
-                        continue
-                    fi
-
-                    if [[ "$is_enabled" == "true" ]]; then
-                        if [[ ! -e "$mount_path" ]] || [[ ! -p "$mount_path" ]]; then
-                            log "Local .env file is invalid (file is not present or not a FIFO)"
-                            invalid_mounts+=("$mount_path|$environment_name")
-                        else
-                            log "Local .env file is valid and enabled"
-                        fi
-                    else
-                        log "Local .env file is disabled"
-                        disabled_mounts+=("$mount_path|$environment_name")
+                # Query the DB to check enabled status, but only for TOML-specified mounts
+                os_type=$(detect_os)
+                db_path=""
+                mount_hex_data=""
+                
+                if [[ "$os_type" != "unknown" ]]; then
+                    db_path=$(find_1password_db "$os_type")
+                    if [[ -n "$db_path" ]]; then
+                        mount_hex_data=$(query_mounts "$db_path")
                     fi
                 fi
-            done <<< "$mount_hex_data"
+                
+                # Build an array of unique normalized paths from TOML
+                toml_paths_array=()
+                while IFS= read -r mount_path || [[ -n "$mount_path" ]]; do
+                    [[ -z "$mount_path" ]] && continue
+                    
+                    # Resolve mount path relative to project root
+                    if [[ "$mount_path" == /* ]]; then
+                        resolved_path="$mount_path"
+                    else
+                        resolved_path="${PROJECT_ROOT}/${mount_path}"
+                    fi
+                    
+                    # Normalize the path
+                    resolved_path=$(normalize_path "$resolved_path")
+                    
+                    # Add to array only if not already present
+                    path_exists=false
+                    if [[ ${#toml_paths_array[@]} -gt 0 ]]; then
+                        for existing_path in "${toml_paths_array[@]}"; do
+                            if [[ "$existing_path" == "$resolved_path" ]]; then
+                                path_exists=true
+                                break
+                            fi
+                        done
+                    fi
+                    if [[ "$path_exists" == "false" ]]; then
+                        toml_paths_array+=("$resolved_path")
+                    fi
+                done <<< "$toml_mounts"
+                
+                # Check each TOML-specified mount
+                if [[ ${#toml_paths_array[@]} -gt 0 ]]; then
+                    for resolved_path in "${toml_paths_array[@]}"; do
+                    log "Checking required local .env file from TOML: \"${resolved_path}\""
+                    
+                    # Check if path exists and is a FIFO
+                    if [[ ! -e "$resolved_path" ]] || [[ ! -p "$resolved_path" ]]; then
+                        log "Required local .env file is missing or invalid: \"${resolved_path}\""
+                        required_mounts+=("$resolved_path")
+                    else
+                        # Check if it's enabled in 1Password (if we have DB access)
+                        found_in_db=false
+                        is_enabled="false"
+                        environment_name=""
+                        
+                        if [[ -n "$mount_hex_data" ]]; then
+                            while IFS= read -r hex_line || [[ -n "$hex_line" ]]; do
+                                [[ -z "$hex_line" ]] && continue
+                                
+                                mount_info=$(parse_mount "$hex_line")
+                                if [[ -n "$mount_info" ]]; then
+                                    mount_path="${mount_info%%|*}"
+                                    remaining="${mount_info#*|}"
+                                    mount_is_enabled="${remaining%%|*}"
+                                    remaining="${remaining#*|}"
+                                    mount_env_name="${remaining%%|*}"
+                                    
+                                    # Normalize DB mount path for comparison
+                                    normalized_db_path=$(normalize_path "$mount_path")
+                                    
+                                    if [[ "$normalized_db_path" == "$resolved_path" ]]; then
+                                        found_in_db=true
+                                        is_enabled="$mount_is_enabled"
+                                        environment_name="$mount_env_name"
+                                        break
+                                    fi
+                                fi
+                            done <<< "$mount_hex_data"
+                        fi
+                        
+                        if [[ "$found_in_db" == "true" ]]; then
+                            if [[ "$is_enabled" == "false" ]]; then
+                                log "Required local .env file exists but is disabled: \"${resolved_path}\""
+                                disabled_mounts+=("$resolved_path|$environment_name")
+                            else
+                                log "Required local .env file is valid and enabled: \"${resolved_path}\""
+                            fi
+                        else
+                            # File exists but not found in DB - this is unusual but not necessarily an error
+                            # The file might have been created manually or the DB query failed
+                            log "Required local .env file exists but not found in 1Password database: \"${resolved_path}\""
+                            log "Assuming valid (file exists and is a FIFO)"
+                        fi
+                    fi
+                    done
+                fi
+            fi
+        else
+            log "Warning: Failed to parse environments.toml"
         fi
+    else
+        log "Warning: environments.toml exists but does not specify a mounts field. Using default behavior (checking all local .env files in project)."
     fi
 fi
 
-# Check for TOML-based required mounts
-toml_file="${PROJECT_ROOT}/.1password/environments.toml"
-if [[ -f "$toml_file" ]]; then
-    log "Found environments.toml, checking required files..."
+# Default mode: Check all local .env files within the project
+if [[ "$toml_override_mode" == "false" ]]; then
+    log "Using default validation mode: checking all local .env files in project from 1Password database"
     
-    toml_mounts=$(parse_toml_mounts "$toml_file")
-    if [[ $? -eq 0 ]] && [[ -n "$toml_mounts" ]]; then
-        while IFS= read -r mount_path || [[ -n "$mount_path" ]]; do
-            [[ -z "$mount_path" ]] && continue
-            
-            # Resolve mount path relative to project root
-            if [[ "$mount_path" == /* ]]; then
-                # Absolute path
-                resolved_path="$mount_path"
-            else
-                # Relative path
-                resolved_path="${PROJECT_ROOT}/${mount_path}"
-            fi
-            
-            # Normalize the path
-            resolved_path=$(normalize_path "$resolved_path")
-            
-            log "Checking required local .env file from TOML: \"${resolved_path}\""
-            
-            # Check if path exists and is a FIFO
-            if [[ ! -e "$resolved_path" ]] || [[ ! -p "$resolved_path" ]]; then
-                log "Required local .env file is missing or invalid: \"${resolved_path}\""
-                required_mounts+=("$resolved_path")
-            else
-                log "Required local .env file is valid: \"${resolved_path}\""
-            fi
-        done <<< "$toml_mounts"
+    os_type=$(detect_os)
+
+    if [[ "$os_type" == "unknown" ]]; then
+        log "Unsupported OS, skipping remaining hook"
     else
-        log "Warning: Failed to parse environments.toml or no local .env files found"
+        log "Attempting to access 1Password database..."
+
+        db_path=$(find_1password_db "$os_type")
+        if [[ -z "$db_path" ]]; then
+            log "1Password database not found, skipping remaining hook"
+        else
+            log "1Password database found: $db_path"
+
+            # Query for mounts
+            mount_hex_data=$(query_mounts "$db_path")
+
+            if [[ -z "$mount_hex_data" ]]; then
+                log "No local .env files found in 1Password database, skipping remaining hook"
+            else
+                log "Environment mount data found, checking relevant local .env files..."
+
+                # Process each mount entry
+                while IFS= read -r hex_line || [[ -n "$hex_line" ]]; do
+                    [[ -z "$hex_line" ]] && continue
+                    
+                    mount_info=$(parse_mount "$hex_line")
+                    if [[ -n "$mount_info" ]]; then
+                        # Parse mount_info: mount_path|is_enabled|environment_name|uuid|environment_uuid
+                        mount_path="${mount_info%%|*}"
+                        remaining="${mount_info#*|}"
+                        is_enabled="${remaining%%|*}"
+                        remaining="${remaining#*|}"
+                        environment_name="${remaining%%|*}"
+                        remaining="${remaining#*|}"
+                        uuid="${remaining%%|*}"
+                        environment_uuid="${remaining#*|}"
+                        
+                        log "Checking local .env file with id ${uuid} at path \"${mount_path}\" for environment ${environment_uuid} (${environment_name})"
+
+                        # Check if this mount is relevant to the current project
+                        if ! is_project_mount "$mount_path" "$PROJECT_ROOT"; then
+                            log "Local .env file does not belong to the current project, skipping"
+                            continue
+                        fi
+
+                        if [[ "$is_enabled" == "true" ]]; then
+                            if [[ ! -e "$mount_path" ]] || [[ ! -p "$mount_path" ]]; then
+                                log "Local .env file is invalid (file is not present or not a FIFO)"
+                                invalid_mounts+=("$mount_path|$environment_name")
+                            else
+                                log "Local .env file is valid and enabled"
+                            fi
+                        else
+                            log "Local .env file is disabled"
+                            disabled_mounts+=("$mount_path|$environment_name")
+                        fi
+                    fi
+                done <<< "$mount_hex_data"
+            fi
+        fi
     fi
 fi
 
