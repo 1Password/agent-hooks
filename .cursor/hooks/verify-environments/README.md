@@ -119,11 +119,17 @@ If you're on Windows, this hook will be skipped automatically.
 
 ## Configuration
 
-Hooks are intended to be configured at the project or user-specific level. Simply add the hook file to the desired location and then configure it in the corresponding `.cursor/hooks.json` file, and the behaviour will become available. [More information here](https://cursor.com/docs/agent/hooks#configuration).
+Hooks can be configured at multiple levels. Simply add the hook file to the desired location and then configure it in the corresponding `hooks.json` file, and the behaviour will become available:
+
+- **Project-specific**: `.cursor/hooks.json` in the project root (applies only to that project)
+- **User-specific**: `~/.cursor/hooks.json` or similar user configuration directory (applies to all projects for that user)
+- **Global/system-level**: System-wide configuration location (applies to all users on the system)
+
+Configuration at more specific levels (project) takes precedence over more general levels (user, global). [More information here](https://cursor.com/docs/agent/hooks#configuration).
 
 ### Example Configuration
 
-Add the following to `.cursor/hooks.json`:
+Add the following to `hooks.json` (at the project, user, or global level as desired):
 
 ```json
 {
