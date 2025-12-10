@@ -300,26 +300,26 @@ normalize_path() {
     echo "$path"
 }
 
-# Check if mount path is within project
-is_project_mount() {
+# Check if mount path is within the current directory being validated
+is_validation_path_mount() {
     local mount_path="$1"
-    local project_path="$2"
+    local validation_path="$2"
     
     # Normalize paths for comparison
-    local normalized_mount normalized_project
+    local normalized_mount normalized_validation_path
     
-    normalized_mount=$(normalize_path "$mount_path")
-    normalized_project=$(normalize_path "$project_path")
+    normalized_mount=$(normalize_path "$mount_path") # @Todo - why was this set to normalize path?
+    normalized_validation_path=$(normalize_path "$validation_path")
     
     # Ensure both paths end with / for consistent comparison
-    [[ "$normalized_project" != */ ]] && normalized_project="${normalized_project}/"
+    [[ "$normalized_validation_path" != */ ]] && normalized_validation_path="${normalized_validation_path}/"
     
-    # Check if mount path starts with project path (mount is within project)
+    # Check if mount path starts with validation path (mount is within path being validated)
     # Also check original paths in case normalization failed
-    if [[ "$normalized_mount" == "$normalized_project"* ]] || \
-       [[ "$normalized_mount" == "$project_path" ]] || \
-       [[ "$mount_path" == "$project_path"* ]] || \
-       [[ "$mount_path" == "$project_path" ]]; then
+    if [[ "$normalized_mount" == "$normalized_validation_path"* ]] || \
+       [[ "$normalized_mount" == "$validation_path" ]] || \
+       [[ "$mount_path" == "$validation_path"* ]] || \
+       [[ "$mount_path" == "$validation_path" ]]; then
         return 0
     fi
     
@@ -442,7 +442,7 @@ parse_toml_mounts() {
 }
 
 # Extract the value of the `cwd` field from JSON input
-# `cwd` represents the current working directory of the project
+# `cwd` represents the current working directory of the path being validated
 extract_cwd_from_json() {
     local json_input="$1"
     local cwd=""
@@ -509,32 +509,32 @@ EOF
     fi
 }
 
-# Determine the project's root directory from the `cwd` field in Cursor's JSON input
-PROJECT_ROOT=""
+# Determine the path in which mounts should be validated
+VALIDATION_PATH=""
 
-# Read the JSON input from stdin (Cursor provides this when invoking hooks)
+# Read the JSON input from stdin (Provided by Cursor or entered manually by the user)
 if [[ ! -t 0 ]]; then
     json_input=$(cat 2>/dev/null || echo "")
 
     if [[ -n "$json_input" ]]; then
         cwd=$(extract_cwd_from_json "$json_input" 2>/dev/null || echo "")
-        # Find the absolute path of the project directory
+        # Find the absolute path of the validation directory
         if [[ -n "$cwd" ]]; then
-            PROJECT_ROOT=$(cd "$cwd" && pwd 2>/dev/null || echo "")
+            VALIDATION_PATH=$(cd "$cwd" && pwd 2>/dev/null || echo "")
         fi
     fi
 fi
 
-# If the project root cannot be determined, skip environment validation and avoid blocking the user's execution.
-if [[ -z "$PROJECT_ROOT" ]]; then
-    log "Warning: Unable to determine project root from JSON input."
+# If the validation path cannot be determined, skip environment validation and avoid blocking the user's execution.
+if [[ -z "$VALIDATION_PATH" ]]; then
+    log "Warning: Unable to determine validation path from JSON input."
     output_response
     exit 0
 fi
 
 # Main logic: Query 1Password database and check mounts
 log "Checking for 1Password environment mounts..."
-log "Project root: $PROJECT_ROOT"
+log "Validating mounts in: $VALIDATION_PATH"
 
 os_type=$(detect_os)
 
@@ -575,9 +575,9 @@ else
                     
                     log "Checking mount ${uuid} at path \"${mount_path}\" for environment ${environment_uuid} (${environment_name})"
 
-                    # Check if this mount is relevant to the current project
-                    if ! is_project_mount "$mount_path" "$PROJECT_ROOT"; then
-                        log "Mount does not belong to the current project, skipping"
+                    # Check if this mount is relevant to the current validation path
+                    if ! is_validation_path_mount "$mount_path" "$VALIDATION_PATH"; then
+                        log "Mount does not belong to the current validation path, skipping"
                         continue
                     fi
 
@@ -599,7 +599,7 @@ else
 fi
 
 # Check for TOML-based required mounts
-toml_file="${PROJECT_ROOT}/.1password/environments.toml"
+toml_file="${VALIDATION_PATH}/.1password/environments.toml"
 if [[ -f "$toml_file" ]]; then
     log "Found environments.toml, checking required mounts..."
     
@@ -608,13 +608,13 @@ if [[ -f "$toml_file" ]]; then
         while IFS= read -r mount_path || [[ -n "$mount_path" ]]; do
             [[ -z "$mount_path" ]] && continue
             
-            # Resolve mount path relative to project root
+            # Resolve mount path relative to validation path
             if [[ "$mount_path" == /* ]]; then
                 # Absolute path
                 resolved_path="$mount_path"
             else
                 # Relative path
-                resolved_path="${PROJECT_ROOT}/${mount_path}"
+                resolved_path="${VALIDATION_PATH}/${mount_path}"
             fi
             
             # Normalize the path
@@ -677,16 +677,16 @@ if [[ ${#all_missing_invalid[@]} -gt 0 ]] || [[ ${#disabled_mounts[@]} -gt 0 ]];
         
         if [[ ${#all_missing_invalid[@]} -eq 1 ]]; then
             if [[ -n "$environment_name" ]]; then
-                agent_message="This project uses 1Password environments. An environment file is expected to be mounted at the specified path. Error: the file is missing or invalid. Environment name: \"${environment_name}\". Path: \"${all_missing_invalid[0]}\". Suggestion: ensure the local file mount is configured and enabled from the environment's destinations tab in the 1Password app."
+                agent_message="This directory uses 1Password environments. An environment file is expected to be mounted at the specified path. Error: the file is missing or invalid. Environment name: \"${environment_name}\". Path: \"${all_missing_invalid[0]}\". Suggestion: ensure the local file mount is configured and enabled from the environment's destinations tab in the 1Password app."
             else
-                agent_message="This project uses 1Password environments. An environment file is required by environments.toml. Error: the file is missing or invalid. Path: \"${all_missing_invalid[0]}\". Suggestion: ensure the local file mount is configured and enabled from the environment's destinations tab in the 1Password app."
+                agent_message="This directory uses 1Password environments. An environment file is required by environments.toml. Error: the file is missing or invalid. Path: \"${all_missing_invalid[0]}\". Suggestion: ensure the local file mount is configured and enabled from the environment's destinations tab in the 1Password app."
             fi
         else
             file_list=$(IFS=', '; echo "${all_missing_invalid[*]}")
             if [[ -n "$environment_name" ]]; then
-                agent_message="This project uses 1Password environments. Environment files are expected to be mounted at the specified paths. Error: these files are missing or invalid. Environment name: \"${environment_name}\". Paths: \"${file_list}\". Suggestion: ensure the local file mounts are configured and enabled from the environment's destinations tab in the 1Password app."
+                agent_message="This directory uses 1Password environments. Environment files are expected to be mounted at the specified paths. Error: these files are missing or invalid. Environment name: \"${environment_name}\". Paths: \"${file_list}\". Suggestion: ensure the local file mounts are configured and enabled from the environment's destinations tab in the 1Password app."
             else
-                agent_message="This project uses 1Password environments. Environment files are required by environments.toml. Error: these files are missing or invalid. Paths: \"${file_list}\". Suggestion: ensure the local file mounts are configured and enabled from the environment's destinations tab in the 1Password app."
+                agent_message="This directory uses 1Password environments. Environment files are required by environments.toml. Error: these files are missing or invalid. Paths: \"${file_list}\". Suggestion: ensure the local file mounts are configured and enabled from the environment's destinations tab in the 1Password app."
             fi
         fi
     fi
@@ -717,9 +717,9 @@ if [[ ${#all_missing_invalid[@]} -gt 0 ]] || [[ ${#disabled_mounts[@]} -gt 0 ]];
             agent_message="${agent_message} ${disabled_msg}"
         else
             if [[ ${#disabled_mounts[@]} -eq 1 ]]; then
-                agent_message="This project uses 1Password environments. An environment file is expected to be mounted at the specified path. ${disabled_msg}"
+                agent_message="This directory uses 1Password environments. An environment file is expected to be mounted at the specified path. ${disabled_msg}"
             else
-                agent_message="This project uses 1Password environments. Environment files are expected to be mounted at the specified paths. ${disabled_msg}"
+                agent_message="This directory uses 1Password environments. Environment files are expected to be mounted at the specified paths. ${disabled_msg}"
             fi
         fi
     fi
