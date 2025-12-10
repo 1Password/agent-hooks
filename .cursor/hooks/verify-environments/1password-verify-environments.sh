@@ -71,20 +71,14 @@ log() {
 # Escape JSON string value (returns escaped string without quotes)
 escape_json_string() {
     local str="$1"
-    # Use Python if available for reliable JSON escaping
-    if command -v python3 &> /dev/null; then
-        # Use json.dumps and remove surrounding quotes
-        python3 -c "import json, sys; s=json.dumps(sys.stdin.read()); print(s[1:-1])" <<< "$str" 2>/dev/null || echo "$str"
-    else
-        # Fallback: basic escaping (handles most common cases)
-        # Escape backslashes first, then quotes, then control characters
-        str=$(echo "$str" | sed 's/\\/\\\\/g')
-        str=$(echo "$str" | sed 's/"/\\"/g')
-        str=$(echo "$str" | sed 's/\n/\\n/g')
-        str=$(echo "$str" | sed 's/\r/\\r/g')
-        str=$(echo "$str" | sed 's/\t/\\t/g')
-        echo "$str"
-    fi
+    # JSON string escaping (handles most common cases)
+    # Escape backslashes, quotes, and control characters
+    str=$(echo "$str" | sed 's/\\/\\\\/g')
+    str=$(echo "$str" | sed 's/"/\\"/g')
+    str=$(echo "$str" | sed 's/\n/\\n/g')
+    str=$(echo "$str" | sed 's/\r/\\r/g')
+    str=$(echo "$str" | sed 's/\t/\\t/g')
+    echo "$str"
 }
 
 # Output JSON response with permission decision
@@ -135,32 +129,7 @@ normalize_path() {
     local path="$1"
     local normalized
     
-    # Try realpath first (GNU/Linux, or if installed on macOS via Homebrew)
-    if command -v realpath &> /dev/null; then
-        # Try -m flag (GNU realpath) - allows non-existent paths
-        normalized=$(realpath -m "$path" 2>/dev/null)
-        if [[ -n "$normalized" ]] && [[ "$normalized" != "$path" ]] || [[ -n "$normalized" ]]; then
-            echo "$normalized"
-            return 0
-        fi
-        # Try without -m flag (some realpath implementations)
-        normalized=$(realpath "$path" 2>/dev/null)
-        if [[ -n "$normalized" ]]; then
-            echo "$normalized"
-            return 0
-        fi
-    fi
-    
-    # Try readlink -f (common on Linux, may not work on macOS)
-    if command -v readlink &> /dev/null; then
-        normalized=$(readlink -f "$path" 2>/dev/null)
-        if [[ -n "$normalized" ]] && [[ "$normalized" != "$path" ]]; then
-            echo "$normalized"
-            return 0
-        fi
-    fi
-    
-    # Fallback: basic normalization using cd (works on both macOS and Linux)
+    # Normalize a given path using cd
     # This resolves . and .. components and symlinks for existing paths
     if [[ -d "$path" ]]; then
         # For directories, use cd to resolve
@@ -295,36 +264,15 @@ hex_to_json() {
     # Skip if empty
     [[ -z "$hex" ]] && return 1
     
-    # Try xxd first (most reliable, available on both macOS and Linux)
-    if command -v xxd &> /dev/null; then
-        local decoded
-        decoded=$(echo "$hex" | xxd -r -p 2>/dev/null)
-        if [[ -n "$decoded" ]]; then
-            echo "$decoded"
-            return 0
-        fi
-    fi
-    
-    # Fallback: use printf with escaped hex
+    # Use printf with escaped hex
     # Convert hex pairs to \x escaped format
-    # Note: printf %b behavior may vary, but this is a reasonable fallback
     local escaped_hex decoded
     escaped_hex=$(echo "$hex" | sed 's/\(..\)/\\x\1/g')
-    
-    # Try printf %b (works on most systems)
+
     decoded=$(printf "%b" "$escaped_hex" 2>/dev/null || echo "")
     if [[ -n "$decoded" ]] && [[ "$decoded" != "$escaped_hex" ]]; then
         echo "$decoded"
         return 0
-    fi
-    
-    # Last resort: try Python if available (common on both macOS and Linux)
-    if command -v python3 &> /dev/null; then
-        decoded=$(python3 -c "import sys; sys.stdout.buffer.write(bytes.fromhex('$hex'))" 2>/dev/null || echo "")
-        if [[ -n "$decoded" ]]; then
-            echo "$decoded"
-            return 0
-        fi
     fi
     
     return 1
@@ -342,52 +290,36 @@ parse_mount() {
     fi
     
     # Extract mountPath, isEnabled, environmentName, uuid, and environmentUuid from JSON
-    # Using jq if available, otherwise fall back to grep/sed
-    if command -v jq &> /dev/null; then
-        local mount_path is_enabled environment_name uuid environment_uuid
-        mount_path=$(echo "$json_data" | jq -r '.mountPath // empty' 2>/dev/null || echo "")
-        is_enabled=$(echo "$json_data" | jq -r '.isEnabled // false' 2>/dev/null || echo "false")
-        environment_name=$(echo "$json_data" | jq -r '.environmentName // empty' 2>/dev/null || echo "")
-        uuid=$(echo "$json_data" | jq -r '.uuid // empty' 2>/dev/null || echo "")
-        environment_uuid=$(echo "$json_data" | jq -r '.environmentUuid // empty' 2>/dev/null || echo "")
-        
-        if [[ -n "$mount_path" ]]; then
-            echo "$mount_path|$is_enabled|$environment_name|$uuid|$environment_uuid"
-            return 0
-        fi
+    # Note: This may not handle all JSON edge cases (escaped quotes, etc.)
+    # but should work for typical 1Password mount JSON structures
+    local mount_path is_enabled environment_name uuid environment_uuid
+    
+    # Extract mountPath - handle both BSD and GNU sed
+    mount_path=$(echo "$json_data" | grep -oE '"mountPath"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"mountPath"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || \
+                 echo "$json_data" | grep -o '"mountPath"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"mountPath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null || echo "")
+    
+    # Check for isEnabled: true or false
+    if echo "$json_data" | grep -qE '"isEnabled"[[:space:]]*:[[:space:]]*true'; then
+        is_enabled="true"
     else
-        # Fallback: simple grep/sed parsing (works on both macOS and Linux)
-        # Note: This may not handle all JSON edge cases (escaped quotes, etc.)
-        # but should work for typical 1Password mount JSON structures
-        local mount_path is_enabled environment_name uuid environment_uuid
-        
-        # Extract mountPath - handle both BSD and GNU sed
-        mount_path=$(echo "$json_data" | grep -oE '"mountPath"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"mountPath"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || \
-                     echo "$json_data" | grep -o '"mountPath"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"mountPath"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null || echo "")
-        
-        # Check for isEnabled: true or false
-        if echo "$json_data" | grep -qE '"isEnabled"[[:space:]]*:[[:space:]]*true'; then
-            is_enabled="true"
-        else
-            is_enabled="false"
-        fi
-        
-        # Extract environmentName - handle both BSD and GNU sed
-        environment_name=$(echo "$json_data" | grep -oE '"environmentName"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"environmentName"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || \
-                          echo "$json_data" | grep -o '"environmentName"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"environmentName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null || echo "")
-        
-        # Extract uuid - handle both BSD and GNU sed
-        uuid=$(echo "$json_data" | grep -oE '"uuid"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"uuid"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || \
-               echo "$json_data" | grep -o '"uuid"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"uuid"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null || echo "")
-        
-        # Extract environmentUuid - handle both BSD and GNU sed
-        environment_uuid=$(echo "$json_data" | grep -oE '"environmentUuid"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"environmentUuid"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || \
-                          echo "$json_data" | grep -o '"environmentUuid"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"environmentUuid"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null || echo "")
-        
-        if [[ -n "$mount_path" ]]; then
-            echo "$mount_path|$is_enabled|$environment_name|$uuid|$environment_uuid"
-            return 0
-        fi
+        is_enabled="false"
+    fi
+    
+    # Extract environmentName - handle both BSD and GNU sed
+    environment_name=$(echo "$json_data" | grep -oE '"environmentName"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"environmentName"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || \
+                      echo "$json_data" | grep -o '"environmentName"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"environmentName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null || echo "")
+    
+    # Extract uuid - handle both BSD and GNU sed
+    uuid=$(echo "$json_data" | grep -oE '"uuid"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"uuid"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || \
+           echo "$json_data" | grep -o '"uuid"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"uuid"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null || echo "")
+    
+    # Extract environmentUuid - handle both BSD and GNU sed
+    environment_uuid=$(echo "$json_data" | grep -oE '"environmentUuid"[[:space:]]*:[[:space:]]*"[^"]*"' | sed -E 's/.*"environmentUuid"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/' 2>/dev/null || \
+                      echo "$json_data" | grep -o '"environmentUuid"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"environmentUuid"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' 2>/dev/null || echo "")
+    
+    if [[ -n "$mount_path" ]]; then
+        echo "$mount_path|$is_enabled|$environment_name|$uuid|$environment_uuid"
+        return 0
     fi
     
     return 1

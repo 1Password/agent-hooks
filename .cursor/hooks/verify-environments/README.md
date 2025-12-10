@@ -78,12 +78,14 @@ Add the following to `.cursor/hooks.json`:
 **Required:**
 - `sqlite3` - For querying the 1Password database. Must be installed and available in your PATH.
 
-**Optional:**
-- `jq` - For JSON parsing. Falls back to `grep`/`sed` if not available.
-- `xxd` or `printf` - For hex decoding. Multiple fallback methods are available.
-- `python3` - Used as a fallback for JSON escaping and hex decoding.
+**Standard POSIX Commands Used:**
+The hook uses only standard POSIX commands that are available by default on both macOS and Linux:
+- `bash` - Shell interpreter
+- `grep`, `sed`, `echo`, `date`, `tr` - Text processing
+- `cd`, `pwd`, `dirname`, `basename` - Path manipulation
+- `printf` - Hex decoding and string formatting
 
-The hook gracefully handles missing optional dependencies by using fallback methods. However, `sqlite3` is required for the hook to function.
+The hook uses a "fail open" approach: if `sqlite3` is not available, the hook logs a warning and allows execution to proceed. This prevents blocking development when 1Password is not installed or the database is unavailable.
 
 ## Testing and Debugging
 
