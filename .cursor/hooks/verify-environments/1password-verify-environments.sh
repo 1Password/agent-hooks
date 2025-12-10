@@ -2,26 +2,54 @@
 
 set -euo pipefail
 
+# ============================================================================
+# TABLE OF CONTENTS
+# ============================================================================
+#
+# - Script Header & Configuration
+# - Global Variables
+# - Core Utility Functions (logging, JSON escaping)
+# - System & Path Utility Functions (OS detection, path normalization)
+# - 1Password Database Functions (finding and querying database)
+# - Mount Parsing & Validation Functions (parsing mount data, validation)
+# - TOML Parsing Functions
+# - Main Execution Logic
+# - Permission Decision Logic
+#
+# ============================================================================
+
+# ============================================================================
+# SCRIPT HEADER & CONFIGURATION
+# ============================================================================
+
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
+# ============================================================================
+# GLOBAL VARIABLES
+# ============================================================================
+
 # Array of "mount_path|environment_name"
-# Mounts that are set up but not enabled in OPH.
+# Local .env files that are created but not enabled in 1Password.
 disabled_mounts=()
 
 # Array of "mount_path|environment_name"
-# Mounts that are set up but not valid (file is not present or not a FIFO).
+# Local .env files that are created but not valid (file is not present or not a FIFO).
 invalid_mounts=()
 
 # Array of mount paths
-# Mounts that are required by TOML but missing or invalid.
+# Local .env files that are required by TOML but missing or invalid.
 required_mounts=()
 
 # The final permission decision to return to Cursor.
 permission="allow"
 # The message for the agent to interpret if the permission is denied.
 agent_message=""
+
+# ============================================================================
+# CORE UTILITY FUNCTIONS
+# ============================================================================
 
 # Log function for debugging
 log() {
@@ -40,29 +68,6 @@ log() {
     fi
 }
 
-# Decode hex string to JSON
-hex_to_json() {
-    local hex="$1"
-    # Remove any whitespace/newlines
-    hex=$(echo "$hex" | tr -d '[:space:]')
-    
-    # Skip if empty
-    [[ -z "$hex" ]] && return 1
-    
-    # Use printf with escaped hex
-    # Convert hex pairs to \x escaped format
-    local escaped_hex decoded
-    escaped_hex=$(echo "$hex" | sed 's/\(..\)/\\x\1/g')
-
-    decoded=$(printf "%b" "$escaped_hex" 2>/dev/null || echo "")
-    if [[ -n "$decoded" ]] && [[ "$decoded" != "$escaped_hex" ]]; then
-        echo "$decoded"
-        return 0
-    fi
-    
-    return 1
-}
-
 # Escape JSON string value (returns escaped string without quotes)
 escape_json_string() {
     local str="$1"
@@ -75,6 +80,33 @@ escape_json_string() {
     str=$(echo "$str" | sed 's/\t/\\t/g')
     echo "$str"
 }
+
+# Output JSON response with permission decision
+output_response() {
+    log "Decision: $permission"
+    if [[ "$permission" == "deny" ]]; then
+        log "Agent message: $agent_message"
+
+        agent_msg_json=$(escape_json_string "$agent_message")
+
+        cat << EOF
+{
+  "permission": "deny",
+  "agent_message": "$agent_msg_json"
+}
+EOF
+    else
+        cat << EOF
+{
+  "permission": "allow"
+}
+EOF
+    fi
+}
+
+# ============================================================================
+# SYSTEM & PATH UTILITY FUNCTIONS
+# ============================================================================
 
 # Detect operating system
 detect_os() {
@@ -91,6 +123,42 @@ detect_os() {
             ;;
     esac
 }
+
+# Normalize path for cross-platform compatibility
+normalize_path() {
+    local path="$1"
+    local normalized
+    
+    # Normalize a given path using cd
+    # This resolves . and .. components and symlinks for existing paths
+    if [[ -d "$path" ]]; then
+        # For directories, use cd to resolve
+        normalized=$(cd "$path" && pwd 2>/dev/null)
+        if [[ -n "$normalized" ]]; then
+            echo "$normalized"
+            return 0
+        fi
+    elif [[ -f "$path" ]] || [[ -p "$path" ]]; then
+        # For files/FIFOs, resolve the directory part
+        local dir_part file_part
+        dir_part=$(dirname "$path")
+        file_part=$(basename "$path")
+        if [[ -d "$dir_part" ]]; then
+            normalized_dir=$(cd "$dir_part" && pwd 2>/dev/null)
+            if [[ -n "$normalized_dir" ]]; then
+                echo "${normalized_dir}/${file_part}"
+                return 0
+            fi
+        fi
+    fi
+    
+    # Last resort: return path as-is
+    echo "$path"
+}
+
+# ============================================================================
+# 1PASSWORD DATABASE FUNCTIONS
+# ============================================================================
 
 # Find 1Password database based on operating system
 find_1password_db() {
@@ -125,19 +193,19 @@ query_mounts() {
     local db_path="$1"
     
     if ! command -v sqlite3 &> /dev/null; then
-        log "Warning: sqlite3 not found, cannot query OPH database"
+        log "Warning: sqlite3 not found, cannot query 1Password database"
         return 1
     fi
     
     # Check if database is readable
     if [[ ! -r "$db_path" ]]; then
-        log "Warning: OPH database is not readable: ${db_path}"
+        log "Warning: 1Password database is not readable: ${db_path}"
         return 1
     fi
     
     # Check if database file exists and is a valid SQLite database
     if ! sqlite3 "$db_path" "SELECT 1;" &>/dev/null; then
-        log "Warning: OPH database appears to be invalid or locked: ${db_path}"
+        log "Warning: 1Password database appears to be invalid or locked: ${db_path}"
         return 1
     fi
     
@@ -148,13 +216,66 @@ query_mounts() {
     local exit_code=$?
     
     if [[ $exit_code -ne 0 ]]; then
-        log "Warning: Failed to query OPH database (exit code: $exit_code)"
+        log "Warning: Failed to query 1Password database (exit code: $exit_code)"
         return 1
     fi
     
     # Return result even if empty (empty string is valid - means no mounts)
     echo "$result"
     return 0
+}
+
+# ============================================================================
+# MOUNT PARSING & VALIDATION FUNCTIONS
+# ============================================================================
+
+# Check if mount path is within project
+is_project_mount() {
+    local mount_path="$1"
+    local project_path="$2"
+    
+    # Normalize paths for comparison
+    local normalized_mount normalized_project
+    
+    normalized_mount=$(normalize_path "$mount_path")
+    normalized_project=$(normalize_path "$project_path")
+    
+    # Ensure both paths end with / for consistent comparison
+    [[ "$normalized_project" != */ ]] && normalized_project="${normalized_project}/"
+    
+    # Check if mount path starts with project path (mount is within project)
+    # Also check original paths in case normalization failed
+    if [[ "$normalized_mount" == "$normalized_project"* ]] || \
+       [[ "$normalized_mount" == "$project_path" ]] || \
+       [[ "$mount_path" == "$project_path"* ]] || \
+       [[ "$mount_path" == "$project_path" ]]; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Decode hex string to JSON
+hex_to_json() {
+    local hex="$1"
+    # Remove any whitespace/newlines
+    hex=$(echo "$hex" | tr -d '[:space:]')
+    
+    # Skip if empty
+    [[ -z "$hex" ]] && return 1
+    
+    # Use printf with escaped hex
+    # Convert hex pairs to \x escaped format
+    local escaped_hex decoded
+    escaped_hex=$(echo "$hex" | sed 's/\(..\)/\\x\1/g')
+
+    decoded=$(printf "%b" "$escaped_hex" 2>/dev/null || echo "")
+    if [[ -n "$decoded" ]] && [[ "$decoded" != "$escaped_hex" ]]; then
+        echo "$decoded"
+        return 0
+    fi
+    
+    return 1
 }
 
 # Parse mount JSON, extract mount path, enabled status, environment name, uuid, and environmentUuid
@@ -204,63 +325,9 @@ parse_mount() {
     return 1
 }
 
-# Normalize path for cross-platform compatibility
-normalize_path() {
-    local path="$1"
-    local normalized
-    
-    # Normalize a given path using cd
-    # This resolves . and .. components and symlinks for existing paths
-    if [[ -d "$path" ]]; then
-        # For directories, use cd to resolve
-        normalized=$(cd "$path" && pwd 2>/dev/null)
-        if [[ -n "$normalized" ]]; then
-            echo "$normalized"
-            return 0
-        fi
-    elif [[ -f "$path" ]] || [[ -p "$path" ]]; then
-        # For files/FIFOs, resolve the directory part
-        local dir_part file_part
-        dir_part=$(dirname "$path")
-        file_part=$(basename "$path")
-        if [[ -d "$dir_part" ]]; then
-            normalized_dir=$(cd "$dir_part" && pwd 2>/dev/null)
-            if [[ -n "$normalized_dir" ]]; then
-                echo "${normalized_dir}/${file_part}"
-                return 0
-            fi
-        fi
-    fi
-    
-    # Last resort: return path as-is
-    echo "$path"
-}
-
-# Check if mount path is within project
-is_project_mount() {
-    local mount_path="$1"
-    local project_path="$2"
-    
-    # Normalize paths for comparison
-    local normalized_mount normalized_project
-    
-    normalized_mount=$(normalize_path "$mount_path")
-    normalized_project=$(normalize_path "$project_path")
-    
-    # Ensure both paths end with / for consistent comparison
-    [[ "$normalized_project" != */ ]] && normalized_project="${normalized_project}/"
-    
-    # Check if mount path starts with project path (mount is within project)
-    # Also check original paths in case normalization failed
-    if [[ "$normalized_mount" == "$normalized_project"* ]] || \
-       [[ "$normalized_mount" == "$project_path" ]] || \
-       [[ "$mount_path" == "$project_path"* ]] || \
-       [[ "$mount_path" == "$project_path" ]]; then
-        return 0
-    fi
-    
-    return 1
-}
+# ============================================================================
+# TOML PARSING FUNCTIONS
+# ============================================================================
 
 # Parse TOML file and extract mount paths from environments entries
 # Returns newline-separated list of mount paths
@@ -377,9 +444,12 @@ parse_toml_mounts() {
     return 1
 }
 
+# ============================================================================
+# MAIN EXECUTION LOGIC
+# ============================================================================
 
-# Main logic: Query 1Password database and check mounts
-log "Checking for 1Password environment mounts..."
+# Query 1Password database and check mounts
+log "Checking for local .env files mounted by 1Password..."
 log "Project root: $PROJECT_ROOT"
 
 os_type=$(detect_os)
@@ -387,21 +457,21 @@ os_type=$(detect_os)
 if [[ "$os_type" == "unknown" ]]; then
     log "Unsupported OS, skipping remaining hook"
 else
-    log "Attempting to access OPH database..."
+    log "Attempting to access 1Password database..."
 
     db_path=$(find_1password_db "$os_type")
     if [[ -z "$db_path" ]]; then
-        log "OPH database not found, skipping remaining hook"
+        log "1Password database not found, skipping remaining hook"
     else
-        log "OPH database found: $db_path"
+        log "1Password database found: $db_path"
 
         # Query for mounts
         mount_hex_data=$(query_mounts "$db_path")
 
         if [[ -z "$mount_hex_data" ]]; then
-            log "No mounts found in OPH database, skipping remaining hook"
+            log "No local .env files found in 1Password database, skipping remaining hook"
         else
-            log "Environment mount data found, checking relevant mounts..."
+            log "Environment mount data found, checking relevant local .env files..."
 
             # Process each mount entry
             while IFS= read -r hex_line || [[ -n "$hex_line" ]]; do
@@ -419,23 +489,23 @@ else
                     uuid="${remaining%%|*}"
                     environment_uuid="${remaining#*|}"
                     
-                    log "Checking mount ${uuid} at path \"${mount_path}\" for environment ${environment_uuid} (${environment_name})"
+                    log "Checking local .env file with id ${uuid} at path \"${mount_path}\" for environment ${environment_uuid} (${environment_name})"
 
                     # Check if this mount is relevant to the current project
                     if ! is_project_mount "$mount_path" "$PROJECT_ROOT"; then
-                        log "Mount does not belong to the current project, skipping"
+                        log "Local .env file does not belong to the current project, skipping"
                         continue
                     fi
 
                     if [[ "$is_enabled" == "true" ]]; then
                         if [[ ! -e "$mount_path" ]] || [[ ! -p "$mount_path" ]]; then
-                            log "Mount is invalid (file is not present or not a FIFO)"
+                            log "Local .env file is invalid (file is not present or not a FIFO)"
                             invalid_mounts+=("$mount_path|$environment_name")
                         else
-                            log "Mount is valid and enabled"
+                            log "Local .env file is valid and enabled"
                         fi
                     else
-                        log "Mount is disabled"
+                        log "Local .env file is disabled"
                         disabled_mounts+=("$mount_path|$environment_name")
                     fi
                 fi
@@ -447,7 +517,7 @@ fi
 # Check for TOML-based required mounts
 toml_file="${PROJECT_ROOT}/.1password/environments.toml"
 if [[ -f "$toml_file" ]]; then
-    log "Found environments.toml, checking required mounts..."
+    log "Found environments.toml, checking required files..."
     
     toml_mounts=$(parse_toml_mounts "$toml_file")
     if [[ $? -eq 0 ]] && [[ -n "$toml_mounts" ]]; then
@@ -466,20 +536,24 @@ if [[ -f "$toml_file" ]]; then
             # Normalize the path
             resolved_path=$(normalize_path "$resolved_path")
             
-            log "Checking required mount from TOML: \"${resolved_path}\""
+            log "Checking required local .env file from TOML: \"${resolved_path}\""
             
             # Check if path exists and is a FIFO
             if [[ ! -e "$resolved_path" ]] || [[ ! -p "$resolved_path" ]]; then
-                log "Required mount is missing or invalid: \"${resolved_path}\""
+                log "Required local .env file is missing or invalid: \"${resolved_path}\""
                 required_mounts+=("$resolved_path")
             else
-                log "Required mount is valid: \"${resolved_path}\""
+                log "Required local .env file is valid: \"${resolved_path}\""
             fi
         done <<< "$toml_mounts"
     else
-        log "Warning: Failed to parse environments.toml or no mounts found"
+        log "Warning: Failed to parse environments.toml or no local .env files found"
     fi
 fi
+
+# ============================================================================
+# PERMISSION DECISION LOGIC
+# ============================================================================
 
 # Consolidate all missing/invalid mounts (from DB and TOML)
 all_missing_invalid=()
@@ -523,23 +597,23 @@ if [[ ${#all_missing_invalid[@]} -gt 0 ]] || [[ ${#disabled_mounts[@]} -gt 0 ]];
         
         if [[ ${#all_missing_invalid[@]} -eq 1 ]]; then
             if [[ -n "$environment_name" ]]; then
-                agent_message="This project uses 1Password environments. An environment file is expected to be mounted at the specified path. Error: the file is missing or invalid. Environment name: \"${environment_name}\". Path: \"${all_missing_invalid[0]}\". Suggestion: ensure the local file mount is configured and enabled from the environment's destinations tab in the 1Password app."
+                agent_message="This project uses 1Password environments. An environment file is expected to be mounted at the specified path. Error: the file is missing or invalid. Environment name: \"${environment_name}\". Path: \"${all_missing_invalid[0]}\". Suggestion: ensure the local .env file is configured and enabled from the environment's destinations tab in the 1Password app."
             else
-                agent_message="This project uses 1Password environments. An environment file is required by environments.toml. Error: the file is missing or invalid. Path: \"${all_missing_invalid[0]}\". Suggestion: ensure the local file mount is configured and enabled from the environment's destinations tab in the 1Password app."
+                agent_message="This project uses 1Password environments. An environment file is required by environments.toml. Error: the file is missing or invalid. Path: \"${all_missing_invalid[0]}\". Suggestion: ensure the local .env file is configured and enabled from the environment's destinations tab in the 1Password app."
             fi
         else
             file_list=$(IFS=', '; echo "${all_missing_invalid[*]}")
             if [[ -n "$environment_name" ]]; then
-                agent_message="This project uses 1Password environments. Environment files are expected to be mounted at the specified paths. Error: these files are missing or invalid. Environment name: \"${environment_name}\". Paths: \"${file_list}\". Suggestion: ensure the local file mounts are configured and enabled from the environment's destinations tab in the 1Password app."
+                agent_message="This project uses 1Password environments. Environment files are expected to be mounted at the specified paths. Error: these files are missing or invalid. Environment name: \"${environment_name}\". Paths: \"${file_list}\". Suggestion: ensure the local .env files are configured and enabled from the environment's destinations tab in the 1Password app."
             else
-                agent_message="This project uses 1Password environments. Environment files are required by environments.toml. Error: these files are missing or invalid. Paths: \"${file_list}\". Suggestion: ensure the local file mounts are configured and enabled from the environment's destinations tab in the 1Password app."
+                agent_message="This project uses 1Password environments. Environment files are required by environments.toml. Error: these files are missing or invalid. Paths: \"${file_list}\". Suggestion: ensure the local .env files are configured and enabled from the environment's destinations tab in the 1Password app."
             fi
         fi
     fi
     
     # Handle disabled mounts (different issue - needs to be enabled, not configured)
     if [[ ${#disabled_mounts[@]} -gt 0 ]]; then
-        log "Denying permission due to disabled environment mounts"
+        log "Denying permission due to disabled local .env files"
         
         # Extract environment name
         first_disabled="${disabled_mounts[0]}"
@@ -552,10 +626,10 @@ if [[ ${#all_missing_invalid[@]} -gt 0 ]] || [[ ${#disabled_mounts[@]} -gt 0 ]];
         done
         
         if [[ ${#disabled_mounts[@]} -eq 1 ]]; then
-            disabled_msg="Error: the file is not mounted. Environment name: \"${environment_name}\". Path: \"${mount_paths[0]}\". Suggestion: enable the local file mount from the environment's destinations tab in the 1Password app."
+            disabled_msg="Error: the file is not mounted. Environment name: \"${environment_name}\". Path: \"${mount_paths[0]}\". Suggestion: enable the local .env file from the environment's destinations tab in the 1Password app."
         else
             file_list=$(IFS=', '; echo "${mount_paths[*]}")
-            disabled_msg="Error: these files are not mounted. Environment name: \"${environment_name}\". Paths: \"${file_list}\". Suggestion: enable the local file mounts from the environment's destinations tab in the 1Password app."
+            disabled_msg="Error: these files are not mounted. Environment name: \"${environment_name}\". Paths: \"${file_list}\". Suggestion: enable the local .env files from the environment's destinations tab in the 1Password app."
         fi
         
         # Combine messages if we have both missing/invalid and disabled
@@ -572,24 +646,5 @@ if [[ ${#all_missing_invalid[@]} -gt 0 ]] || [[ ${#disabled_mounts[@]} -gt 0 ]];
 fi
 
 # Output JSON response with permission decision
-log "Decision: $permission"
-if [[ "$permission" == "deny" ]]; then
-    log "Agent message: $agent_message"
-    
-    agent_msg_json=$(escape_json_string "$agent_message")
-    
-    cat << EOF
-{
-  "permission": "deny",
-  "agent_message": "$agent_msg_json"
-}
-EOF
-else
-    cat << EOF
-{
-  "permission": "allow"
-}
-EOF
-fi
-
+output_response
 exit 0
