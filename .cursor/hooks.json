@@ -3,7 +3,7 @@
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": ".cursor/hooks/1password-verify-environments.sh"
+        "command": ".cursor/hooks/verify-environments/1password-verify-environments.sh"
       }
     ]
   }
