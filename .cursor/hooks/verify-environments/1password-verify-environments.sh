@@ -2,9 +2,33 @@
 
 set -euo pipefail
 
+# ============================================================================
+# TABLE OF CONTENTS
+# ============================================================================
+#
+# 1. Script Header & Configuration
+# 2. Global Variables
+# 3. Core Utility Functions (logging, JSON escaping)
+# 4. System & Path Utility Functions (OS detection, path normalization)
+# 5. 1Password Database Functions (finding and querying database)
+# 6. Mount Parsing & Validation Functions (parsing mount data, validation)
+# 7. TOML Parsing Functions
+# 8. Main Execution Logic
+# 9. Permission Decision Logic
+#
+# ============================================================================
+
+# ============================================================================
+# 1. SCRIPT HEADER & CONFIGURATION
+# ============================================================================
+
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# ============================================================================
+# 2. GLOBAL VARIABLES
+# ============================================================================
 
 # Array of "mount_path|environment_name"
 # Local .env files that are created but not enabled in 1Password.
@@ -23,6 +47,10 @@ permission="allow"
 # The message for the agent to interpret if the permission is denied.
 agent_message=""
 
+# ============================================================================
+# 3. CORE UTILITY FUNCTIONS
+# ============================================================================
+
 # Log function for debugging
 log() {
     local timestamp
@@ -38,50 +66,6 @@ log() {
         # Ensure log file is writable (create if needed, ignore errors if we can't write)
         echo "$log_message" >> "$log_file" 2>/dev/null || true
     fi
-}
-
-# Decode hex string to JSON
-hex_to_json() {
-    local hex="$1"
-    # Remove any whitespace/newlines
-    hex=$(echo "$hex" | tr -d '[:space:]')
-    
-    # Skip if empty
-    [[ -z "$hex" ]] && return 1
-    
-    # Try xxd first (most reliable, available on both macOS and Linux)
-    if command -v xxd &> /dev/null; then
-        local decoded
-        decoded=$(echo "$hex" | xxd -r -p 2>/dev/null)
-        if [[ -n "$decoded" ]]; then
-            echo "$decoded"
-            return 0
-        fi
-    fi
-    
-    # Fallback: use printf with escaped hex
-    # Convert hex pairs to \x escaped format
-    # Note: printf %b behavior may vary, but this is a reasonable fallback
-    local escaped_hex decoded
-    escaped_hex=$(echo "$hex" | sed 's/\(..\)/\\x\1/g')
-    
-    # Try printf %b (works on most systems)
-    decoded=$(printf "%b" "$escaped_hex" 2>/dev/null || echo "")
-    if [[ -n "$decoded" ]] && [[ "$decoded" != "$escaped_hex" ]]; then
-        echo "$decoded"
-        return 0
-    fi
-    
-    # Last resort: try Python if available (common on both macOS and Linux)
-    if command -v python3 &> /dev/null; then
-        decoded=$(python3 -c "import sys; sys.stdout.buffer.write(bytes.fromhex('$hex'))" 2>/dev/null || echo "")
-        if [[ -n "$decoded" ]]; then
-            echo "$decoded"
-            return 0
-        fi
-    fi
-    
-    return 1
 }
 
 # Escape JSON string value (returns escaped string without quotes)
@@ -103,6 +87,33 @@ escape_json_string() {
     fi
 }
 
+# Output JSON response with permission decision
+output_response() {
+    log "Decision: $permission"
+    if [[ "$permission" == "deny" ]]; then
+        log "Agent message: $agent_message"
+
+        agent_msg_json=$(escape_json_string "$agent_message")
+
+        cat << EOF
+{
+  "permission": "deny",
+  "agent_message": "$agent_msg_json"
+}
+EOF
+    else
+        cat << EOF
+{
+  "permission": "allow"
+}
+EOF
+    fi
+}
+
+# ============================================================================
+# 4. SYSTEM & PATH UTILITY FUNCTIONS
+# ============================================================================
+
 # Detect operating system
 detect_os() {
     case "$(uname -s)" in
@@ -118,6 +129,67 @@ detect_os() {
             ;;
     esac
 }
+
+# Normalize path for cross-platform compatibility
+normalize_path() {
+    local path="$1"
+    local normalized
+    
+    # Try realpath first (GNU/Linux, or if installed on macOS via Homebrew)
+    if command -v realpath &> /dev/null; then
+        # Try -m flag (GNU realpath) - allows non-existent paths
+        normalized=$(realpath -m "$path" 2>/dev/null)
+        if [[ -n "$normalized" ]] && [[ "$normalized" != "$path" ]] || [[ -n "$normalized" ]]; then
+            echo "$normalized"
+            return 0
+        fi
+        # Try without -m flag (some realpath implementations)
+        normalized=$(realpath "$path" 2>/dev/null)
+        if [[ -n "$normalized" ]]; then
+            echo "$normalized"
+            return 0
+        fi
+    fi
+    
+    # Try readlink -f (common on Linux, may not work on macOS)
+    if command -v readlink &> /dev/null; then
+        normalized=$(readlink -f "$path" 2>/dev/null)
+        if [[ -n "$normalized" ]] && [[ "$normalized" != "$path" ]]; then
+            echo "$normalized"
+            return 0
+        fi
+    fi
+    
+    # Fallback: basic normalization using cd (works on both macOS and Linux)
+    # This resolves . and .. components and symlinks for existing paths
+    if [[ -d "$path" ]]; then
+        # For directories, use cd to resolve
+        normalized=$(cd "$path" && pwd 2>/dev/null)
+        if [[ -n "$normalized" ]]; then
+            echo "$normalized"
+            return 0
+        fi
+    elif [[ -f "$path" ]] || [[ -p "$path" ]]; then
+        # For files/FIFOs, resolve the directory part
+        local dir_part file_part
+        dir_part=$(dirname "$path")
+        file_part=$(basename "$path")
+        if [[ -d "$dir_part" ]]; then
+            normalized_dir=$(cd "$dir_part" && pwd 2>/dev/null)
+            if [[ -n "$normalized_dir" ]]; then
+                echo "${normalized_dir}/${file_part}"
+                return 0
+            fi
+        fi
+    fi
+    
+    # Last resort: return path as-is
+    echo "$path"
+}
+
+# ============================================================================
+# 5. 1PASSWORD DATABASE FUNCTIONS
+# ============================================================================
 
 # Find 1Password database based on operating system
 find_1password_db() {
@@ -184,6 +256,80 @@ query_mounts() {
     return 0
 }
 
+# ============================================================================
+# 6. MOUNT PARSING & VALIDATION FUNCTIONS
+# ============================================================================
+
+# Check if mount path is within project
+is_project_mount() {
+    local mount_path="$1"
+    local project_path="$2"
+    
+    # Normalize paths for comparison
+    local normalized_mount normalized_project
+    
+    normalized_mount=$(normalize_path "$mount_path")
+    normalized_project=$(normalize_path "$project_path")
+    
+    # Ensure both paths end with / for consistent comparison
+    [[ "$normalized_project" != */ ]] && normalized_project="${normalized_project}/"
+    
+    # Check if mount path starts with project path (mount is within project)
+    # Also check original paths in case normalization failed
+    if [[ "$normalized_mount" == "$normalized_project"* ]] || \
+       [[ "$normalized_mount" == "$project_path" ]] || \
+       [[ "$mount_path" == "$project_path"* ]] || \
+       [[ "$mount_path" == "$project_path" ]]; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Decode hex string to JSON
+hex_to_json() {
+    local hex="$1"
+    # Remove any whitespace/newlines
+    hex=$(echo "$hex" | tr -d '[:space:]')
+    
+    # Skip if empty
+    [[ -z "$hex" ]] && return 1
+    
+    # Try xxd first (most reliable, available on both macOS and Linux)
+    if command -v xxd &> /dev/null; then
+        local decoded
+        decoded=$(echo "$hex" | xxd -r -p 2>/dev/null)
+        if [[ -n "$decoded" ]]; then
+            echo "$decoded"
+            return 0
+        fi
+    fi
+    
+    # Fallback: use printf with escaped hex
+    # Convert hex pairs to \x escaped format
+    # Note: printf %b behavior may vary, but this is a reasonable fallback
+    local escaped_hex decoded
+    escaped_hex=$(echo "$hex" | sed 's/\(..\)/\\x\1/g')
+    
+    # Try printf %b (works on most systems)
+    decoded=$(printf "%b" "$escaped_hex" 2>/dev/null || echo "")
+    if [[ -n "$decoded" ]] && [[ "$decoded" != "$escaped_hex" ]]; then
+        echo "$decoded"
+        return 0
+    fi
+    
+    # Last resort: try Python if available (common on both macOS and Linux)
+    if command -v python3 &> /dev/null; then
+        decoded=$(python3 -c "import sys; sys.stdout.buffer.write(bytes.fromhex('$hex'))" 2>/dev/null || echo "")
+        if [[ -n "$decoded" ]]; then
+            echo "$decoded"
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
 # Parse mount JSON, extract mount path, enabled status, environment name, uuid, and environmentUuid
 parse_mount() {
     local hex_data="$1"
@@ -247,88 +393,9 @@ parse_mount() {
     return 1
 }
 
-# Normalize path for cross-platform compatibility
-normalize_path() {
-    local path="$1"
-    local normalized
-    
-    # Try realpath first (GNU/Linux, or if installed on macOS via Homebrew)
-    if command -v realpath &> /dev/null; then
-        # Try -m flag (GNU realpath) - allows non-existent paths
-        normalized=$(realpath -m "$path" 2>/dev/null)
-        if [[ -n "$normalized" ]] && [[ "$normalized" != "$path" ]] || [[ -n "$normalized" ]]; then
-            echo "$normalized"
-            return 0
-        fi
-        # Try without -m flag (some realpath implementations)
-        normalized=$(realpath "$path" 2>/dev/null)
-        if [[ -n "$normalized" ]]; then
-            echo "$normalized"
-            return 0
-        fi
-    fi
-    
-    # Try readlink -f (common on Linux, may not work on macOS)
-    if command -v readlink &> /dev/null; then
-        normalized=$(readlink -f "$path" 2>/dev/null)
-        if [[ -n "$normalized" ]] && [[ "$normalized" != "$path" ]]; then
-            echo "$normalized"
-            return 0
-        fi
-    fi
-    
-    # Fallback: basic normalization using cd (works on both macOS and Linux)
-    # This resolves . and .. components and symlinks for existing paths
-    if [[ -d "$path" ]]; then
-        # For directories, use cd to resolve
-        normalized=$(cd "$path" && pwd 2>/dev/null)
-        if [[ -n "$normalized" ]]; then
-            echo "$normalized"
-            return 0
-        fi
-    elif [[ -f "$path" ]] || [[ -p "$path" ]]; then
-        # For files/FIFOs, resolve the directory part
-        local dir_part file_part
-        dir_part=$(dirname "$path")
-        file_part=$(basename "$path")
-        if [[ -d "$dir_part" ]]; then
-            normalized_dir=$(cd "$dir_part" && pwd 2>/dev/null)
-            if [[ -n "$normalized_dir" ]]; then
-                echo "${normalized_dir}/${file_part}"
-                return 0
-            fi
-        fi
-    fi
-    
-    # Last resort: return path as-is
-    echo "$path"
-}
-
-# Check if mount path is within project
-is_project_mount() {
-    local mount_path="$1"
-    local project_path="$2"
-    
-    # Normalize paths for comparison
-    local normalized_mount normalized_project
-    
-    normalized_mount=$(normalize_path "$mount_path")
-    normalized_project=$(normalize_path "$project_path")
-    
-    # Ensure both paths end with / for consistent comparison
-    [[ "$normalized_project" != */ ]] && normalized_project="${normalized_project}/"
-    
-    # Check if mount path starts with project path (mount is within project)
-    # Also check original paths in case normalization failed
-    if [[ "$normalized_mount" == "$normalized_project"* ]] || \
-       [[ "$normalized_mount" == "$project_path" ]] || \
-       [[ "$mount_path" == "$project_path"* ]] || \
-       [[ "$mount_path" == "$project_path" ]]; then
-        return 0
-    fi
-    
-    return 1
-}
+# ============================================================================
+# 7. TOML PARSING FUNCTIONS
+# ============================================================================
 
 # Parse TOML file and extract mount paths from environments entries
 # Returns newline-separated list of mount paths
@@ -445,8 +512,11 @@ parse_toml_mounts() {
     return 1
 }
 
+# ============================================================================
+# 8. MAIN EXECUTION LOGIC
+# ============================================================================
 
-# Main logic: Query 1Password database and check mounts
+# Query 1Password database and check mounts
 log "Checking for local .env files mounted by 1Password..."
 log "Project root: $PROJECT_ROOT"
 
@@ -549,6 +619,10 @@ if [[ -f "$toml_file" ]]; then
     fi
 fi
 
+# ============================================================================
+# 9. PERMISSION DECISION LOGIC
+# ============================================================================
+
 # Consolidate all missing/invalid mounts (from DB and TOML)
 all_missing_invalid=()
 if [[ ${#invalid_mounts[@]} -gt 0 ]]; then
@@ -640,24 +714,5 @@ if [[ ${#all_missing_invalid[@]} -gt 0 ]] || [[ ${#disabled_mounts[@]} -gt 0 ]];
 fi
 
 # Output JSON response with permission decision
-log "Decision: $permission"
-if [[ "$permission" == "deny" ]]; then
-    log "Agent message: $agent_message"
-    
-    agent_msg_json=$(escape_json_string "$agent_message")
-    
-    cat << EOF
-{
-  "permission": "deny",
-  "agent_message": "$agent_msg_json"
-}
-EOF
-else
-    cat << EOF
-{
-  "permission": "allow"
-}
-EOF
-fi
-
+output_response
 exit 0
