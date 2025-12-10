@@ -6,20 +6,20 @@ set -euo pipefail
 # TABLE OF CONTENTS
 # ============================================================================
 #
-# 1. Script Header & Configuration
-# 2. Global Variables
-# 3. Core Utility Functions (logging, JSON escaping)
-# 4. System & Path Utility Functions (OS detection, path normalization)
-# 5. 1Password Database Functions (finding and querying database)
-# 6. Mount Parsing & Validation Functions (parsing mount data, validation)
-# 7. TOML Parsing Functions
-# 8. Main Execution Logic
-# 9. Permission Decision Logic
+# - Script Header & Configuration
+# - Global Variables
+# - Core Utility Functions (logging, JSON escaping)
+# - System & Path Utility Functions (OS detection, path normalization)
+# - 1Password Database Functions (finding and querying database)
+# - Mount Parsing & Validation Functions (parsing mount data, validation)
+# - TOML Parsing Functions
+# - Main Execution Logic
+# - Permission Decision Logic
 #
 # ============================================================================
 
 # ============================================================================
-# 1. SCRIPT HEADER & CONFIGURATION
+# SCRIPT HEADER & CONFIGURATION
 # ============================================================================
 
 # Get the directory where this script is located
@@ -27,7 +27,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # ============================================================================
-# 2. GLOBAL VARIABLES
+# GLOBAL VARIABLES
 # ============================================================================
 
 # Array of "mount_path|environment_name"
@@ -48,7 +48,7 @@ permission="allow"
 agent_message=""
 
 # ============================================================================
-# 3. CORE UTILITY FUNCTIONS
+# CORE UTILITY FUNCTIONS
 # ============================================================================
 
 # Log function for debugging
@@ -105,7 +105,7 @@ EOF
 }
 
 # ============================================================================
-# 4. SYSTEM & PATH UTILITY FUNCTIONS
+# SYSTEM & PATH UTILITY FUNCTIONS
 # ============================================================================
 
 # Detect operating system
@@ -157,7 +157,7 @@ normalize_path() {
 }
 
 # ============================================================================
-# 5. 1PASSWORD DATABASE FUNCTIONS
+# 1PASSWORD DATABASE FUNCTIONS
 # ============================================================================
 
 # Find 1Password database based on operating system
@@ -226,7 +226,7 @@ query_mounts() {
 }
 
 # ============================================================================
-# 6. MOUNT PARSING & VALIDATION FUNCTIONS
+# MOUNT PARSING & VALIDATION FUNCTIONS
 # ============================================================================
 
 # Check if mount path is within project
@@ -326,7 +326,7 @@ parse_mount() {
 }
 
 # ============================================================================
-# 7. TOML PARSING FUNCTIONS
+# TOML PARSING FUNCTIONS
 # ============================================================================
 
 # Remove comments and trim whitespace from a TOML line
@@ -518,7 +518,7 @@ parse_toml_mounts() {
 }
 
 # ============================================================================
-# 8. MAIN EXECUTION LOGIC
+# MAIN EXECUTION LOGIC
 # ============================================================================
 
 # Query 1Password database and check mounts
@@ -721,7 +721,7 @@ if [[ "$toml_override_mode" == "false" ]]; then
 fi
 
 # ============================================================================
-# 9. PERMISSION DECISION LOGIC
+# PERMISSION DECISION LOGIC
 # ============================================================================
 
 # Consolidate all missing/invalid mounts (from DB and TOML)
