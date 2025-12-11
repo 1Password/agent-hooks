@@ -6,7 +6,6 @@ set -euo pipefail
 # TABLE OF CONTENTS
 # ============================================================================
 #
-# - Script Header & Configuration
 # - Global Variables
 # - Core Utility Functions (logging, JSON escaping)
 # - System & Path Utility Functions (OS detection, path normalization)
@@ -17,13 +16,6 @@ set -euo pipefail
 # - Permission Decision Logic
 #
 # ============================================================================
-
-# ============================================================================
-# SCRIPT HEADER & CONFIGURATION
-# ============================================================================
-
-# PROJECT_DIR will be set to the first workspace root after parsing JSON input
-PROJECT_DIR=""
 
 # ============================================================================
 # GLOBAL VARIABLES
@@ -584,10 +576,7 @@ if [[ ${#workspace_roots_array[@]} -eq 0 ]]; then
     exit 0
 fi
 
-# Set PROJECT_DIR to the first workspace root
-PROJECT_DIR="${workspace_roots_array[0]}"
 log "Found ${#workspace_roots_array[@]} workspace root(s) to validate"
-log "PROJECT_DIR set to: $PROJECT_DIR"
 
 # Query 1Password database once (shared across all workspace roots)
 os_type=$(detect_os)
