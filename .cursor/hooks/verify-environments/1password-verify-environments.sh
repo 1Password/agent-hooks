@@ -155,10 +155,53 @@ detect_os() {
     esac
 }
 
+# Validate and sanitize path to prevent command injection
+# Returns 0 if path is safe, 1 if unsafe
+validate_path() {
+    local path="$1"
+    
+    # Check for empty path
+    [[ -z "$path" ]] && return 1
+    
+    # Check for command substitution patterns
+    # $() command substitution
+    if [[ "$path" =~ \$\( ]] || [[ "$path" =~ \$\{ ]]; then
+        return 1
+    fi
+    
+    # Backtick command substitution
+    if [[ "$path" =~ \` ]]; then
+        return 1
+    fi
+    
+    # Check for semicolons, pipes, ampersands, and other command separators
+    if [[ "$path" =~ [\;\|\&\<\>] ]]; then
+        return 1
+    fi
+    
+    # Check for control characters that could break commands
+    # Remove all printable characters; if anything remains, there are control chars
+    local non_printable
+    non_printable=$(printf '%s' "$path" | tr -d '[:print:]' 2>/dev/null || echo "")
+    if [[ -n "$non_printable" ]]; then
+        return 1
+    fi
+    
+    # Path is considered safe if it passes all checks
+    return 0
+}
+
 # Normalize path for cross-platform compatibility
 normalize_path() {
     local path="$1"
     local normalized
+    
+    # Validate path before using it with cd to prevent command injection
+    if ! validate_path "$path"; then
+        log "Warning: Unsafe path detected, skipping normalization: ${path}"
+        echo "$path"
+        return 0
+    fi
     
     # Normalize a given path using cd
     # This resolves . and .. components and symlinks for existing paths
@@ -174,7 +217,9 @@ normalize_path() {
         local dir_part file_part
         dir_part=$(dirname "$path")
         file_part=$(basename "$path")
-        if [[ -d "$dir_part" ]]; then
+        
+        # Validate dir_part before using with cd
+        if validate_path "$dir_part" && [[ -d "$dir_part" ]]; then
             normalized_dir=$(cd "$dir_part" && pwd 2>/dev/null)
             if [[ -n "$normalized_dir" ]]; then
                 echo "${normalized_dir}/${file_part}"
@@ -630,6 +675,12 @@ for workspace_root in "${workspace_roots_array[@]}"; do
         toml_paths_array=()
         while IFS= read -r mount_path || [[ -n "$mount_path" ]]; do
             [[ -z "$mount_path" ]] && continue
+            
+            # Validate path from TOML to prevent command injection
+            if ! validate_path "$mount_path"; then
+                log "Warning: Unsafe path detected in environments.toml, skipping: ${mount_path}"
+                continue
+            fi
             
             # Resolve mount path relative to workspace root
             if [[ "$mount_path" == /* ]]; then
