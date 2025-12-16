@@ -52,7 +52,7 @@ When no `.1password/environments.toml` file exists, or when the file exists but 
    - `allow` - All discovered local .env files are valid and enabled.
    - `deny` - One or more discovered local .env files are missing, disabled, or invalid.
 
-The hook uses a "fail open" approach: if 1Password cannot access local .env file data, the hook allows execution to proceed. This prevents blocking development when 1Password is not installed or unexpected errors occur.
+The hook uses a "fail open" approach: if 1Password can't access local .env file data, the hook allows execution to proceed. This prevents blocking development when 1Password is not installed or unexpected errors occur.
 
 ### Validation Flow
 
