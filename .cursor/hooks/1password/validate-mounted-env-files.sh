@@ -194,7 +194,7 @@ validate_path() {
 # Normalize path for cross-platform compatibility
 normalize_path() {
     local path="$1"
-    local normalized
+    local normalized normalized_dir file_part dir_part
     
     # Validate path before using it with cd to prevent command injection
     if ! validate_path "$path"; then
@@ -214,11 +214,22 @@ normalize_path() {
         fi
     elif [[ -f "$path" ]] || [[ -p "$path" ]]; then
         # For files/FIFOs, resolve the directory part
-        local dir_part file_part
         dir_part=$(dirname "$path")
         file_part=$(basename "$path")
         
         # Validate dir_part before using with cd
+        if validate_path "$dir_part" && [[ -d "$dir_part" ]]; then
+            normalized_dir=$(cd "$dir_part" && pwd 2>/dev/null)
+            if [[ -n "$normalized_dir" ]]; then
+                echo "${normalized_dir}/${file_part}"
+                return 0
+            fi
+        fi
+    else
+        # Attempt to normalize non-existent paths (e.g., with .. components)
+        dir_part=$(dirname "$path")
+        file_part=$(basename "$path")
+        
         if validate_path "$dir_part" && [[ -d "$dir_part" ]]; then
             normalized_dir=$(cd "$dir_part" && pwd 2>/dev/null)
             if [[ -n "$normalized_dir" ]]; then
@@ -691,6 +702,12 @@ for workspace_root in "${workspace_roots_array[@]}"; do
             
             # Normalize the path
             resolved_path=$(normalize_path "$resolved_path")
+            
+            # Skip mounts that resolve outside the current workspace root
+            if ! is_project_mount "$resolved_path" "$workspace_root"; then
+                log "Skipping required mount outside workspace root: \"${resolved_path}\" (workspace: \"${workspace_root}\")"
+                continue
+            fi
             
             # Add to array only if not already present
             path_exists=false
