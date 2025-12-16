@@ -46,7 +46,7 @@ agent_message=""
 log() {
     local timestamp
     timestamp=$(date +"%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "$(date +%s)")
-    local log_message="[${timestamp}] [verify-environments] $*"
+    local log_message="[${timestamp}] [validate-mounted-env-files] $*"
     
     if [[ "${DEBUG:-}" == "1" ]]; then
         # If DEBUG=1, echo directly to terminal (stderr for logs)
@@ -920,3 +920,4 @@ fi
 # Output JSON response with permission decision
 output_response
 exit 0
+

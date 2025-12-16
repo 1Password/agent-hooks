@@ -16,4 +16,4 @@ Configuration at more specific levels (project) takes precedence over more gener
 
 ## Available Hooks
 
-- [`1password-verify-environments`](./.cursor/hooks/verify-environments/README.md) - Mounted .env file Validation
+- [`1password-validate-mounted-env-files`](./.cursor/hooks/1password/README.md) - Mounted .env file Validation
