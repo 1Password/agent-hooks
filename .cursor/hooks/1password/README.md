@@ -20,27 +20,26 @@ The hook supports two validation modes: **configured** (when a TOML configuratio
 
 ### Configured Mode
 
-When a `.1password/environments.toml` file exists at the project root **and** contains a `mounts` field, the hook is considered configured. In this mode, **only** the files specified in the TOML file are validated, overriding the default behavior.
+When a `.1password/environments.toml` file exists at the project root **and** contains a `mount_paths` field, the hook is considered configured. In this mode, **only** the files specified in the TOML file are validated, overriding the default behavior.
 
-The hook parses the TOML file to extract mount paths from an `[[environments]]` section with a `mounts` array field:
+The hook parses the TOML file to extract paths from a top-level `mount_paths` array field:
 
 ```toml
-[[environments]]
-mounts = [".env", "billing.env"]
+mount_paths = [".env", "billing.env"]
 ```
 
 **Behavior:**
 
-- If `mounts = [".env"]` is specified, only `.env` is validated within the project path.
-- If `mounts = []` (empty array) is specified, no local .env files are validated (all commands are allowed).
+- If `mount_paths = [".env"]` is specified, only `.env` is validated within the project path.
+- If `mount_paths = []` (empty array) is specified, no local .env files are validated (all commands are allowed).
 - Mount paths can be relative to the project root or absolute.
 - Each specified file is validated to ensure it exists, is a valid FIFO file, and is enabled in 1Password.
 
-**Important:** The `mounts` field must be explicitly defined in the TOML file. If the file exists but doesn't contain a `mounts` field, the hook will log a warning and fall back to default mode.
+**Important:** The `mount_paths` field must be explicitly defined in the TOML file. If the file exists but doesn't contain a `mount_paths` field, the hook will log a warning and fall back to default mode.
 
 ### Default Mode
 
-When no `.1password/environments.toml` file exists, or when the file exists but doesn't specify a `mounts` field, the hook uses default mode. In this mode, the hook:
+When no `.1password/environments.toml` file exists, or when the file exists but doesn't specify a `mount_paths` field, the hook uses default mode. In this mode, the hook:
 
 1. **Detects the operating system** (macOS or Linux).
 2. **Queries 1Password** for mount configurations.
@@ -60,15 +59,15 @@ The hook follows this decision flow:
 
 1. **Check for `.1password/environments.toml`**
 
-   - If file exists and contains `mounts` field → **Configured Mode**.
-   - If file exists but no `mounts` field → Warning logged, **Default Mode**.
+   - If file exists and contains `mount_paths` field → **Configured Mode**.
+   - If file exists but no `mount_paths` field → Warning logged, **Default Mode**.
    - If file doesn't exist → **Default Mode**.
 
 2. **In Configured Mode:**
 
-   - Parse `mounts` array from TOML.
+   - Parse `mount_paths` array from TOML.
    - Validate only the specified files.
-   - If `mounts = []`, no validation is performed (all commands allowed).
+   - If `mount_paths = []`, no validation is performed (all commands allowed).
 
 3. **In Default Mode:**
    - Query 1Password for all local .env files.
@@ -81,8 +80,7 @@ The hook follows this decision flow:
 
 ```toml
 # .1password/environments.toml
-[[environments]]
-mounts = [".env"]
+mount_paths = [".env"]
 ```
 
 Only `.env` is validated. Other files in the project are ignored.
@@ -91,8 +89,7 @@ Only `.env` is validated. Other files in the project are ignored.
 
 ```toml
 # .1password/environments.toml
-[[environments]]
-mounts = [".env", "billing.env", "database.env"]
+mount_paths = [".env", "billing.env", "database.env"]
 ```
 
 Only these three files are validated.
@@ -101,8 +98,7 @@ Only these three files are validated.
 
 ```toml
 # .1password/environments.toml
-[[environments]]
-mounts = []
+mount_paths = []
 ```
 
 No files are validated. All commands are allowed.
