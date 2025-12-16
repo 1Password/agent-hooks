@@ -417,29 +417,15 @@ normalize_toml_line() {
     echo "$line"
 }
 
-# Check to see if a line is a specific section header
-check_toml_section_header() {
-    local line="$1"
-    local expected_header="$2"
-    
-    if [[ "$line" =~ ^\[\[${expected_header}\]\] ]]; then
-        return 0
-    fi
-    
-    return 1
-}
-
-# Check if TOML file has a mounts field defined
-# Returns 0 if mounts field exists, 1 otherwise
-has_toml_mounts_field() {
+# Check if TOML file has a mount_paths field defined at top level
+# Returns 0 if mount_paths field exists, 1 otherwise
+has_toml_mount_paths_field() {
     local toml_file="$1"
     
     # Check for TOML configuration
     if [[ ! -f "$toml_file" ]]; then
         return 1
     fi
-    
-    local in_environments_section=false
     
     while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
         local line
@@ -448,34 +434,25 @@ has_toml_mounts_field() {
         # Skip empty lines
         [[ -z "$line" ]] && continue
         
-        # Check if the line is the expected section header
-        if check_toml_section_header "$line" "environments"; then
-            in_environments_section=true
-            continue
-        fi
-        
-        # If another section header is found, we're no longer in environments
+        # If we hit a section header, we're no longer at top level
         if [[ "$line" =~ ^\[\[.*\]\] ]] || [[ "$line" =~ ^\[.*\] ]]; then
-            in_environments_section=false
-            continue
+            break
         fi
         
-        if [[ "$in_environments_section" == "true" ]]; then
-            # Detect 'mounts' field regardless of single-line or multi-line array
-            if [[ "$line" =~ ^mounts[[:space:]]*= ]]; then
-                return 0
-            fi
+        # Detect 'mount_paths' field at top level
+        if [[ "$line" =~ ^mount_paths[[:space:]]*= ]]; then
+            return 0
         fi
     done < "$toml_file"
     
     return 1
 }
 
-# Parse TOML file and extract mount paths from environments entries
+# Parse TOML file and extract mount paths from top-level mount_paths field
 # Returns newline-separated list of mount paths
-# Returns empty string (but exit code 0) if mounts = []
-# Returns exit code 1 if mounts field doesn't exist
-parse_toml_mounts() {
+# Returns empty string (but exit code 0) if mount_paths = []
+# Returns exit code 1 if mount_paths field doesn't exist
+parse_toml_mount_paths() {
     local toml_file="$1"
     
     if [[ ! -f "$toml_file" ]]; then
@@ -484,17 +461,16 @@ parse_toml_mounts() {
     
     # Pure bash TOML parsing for environments entries
     # Handles formats like:
-    #   mounts = [".env", "billing.env"]
-    #   mounts = [
+    #   mount_paths = [".env", "billing.env"]
+    #   mount_paths = [
     #     ".env",
     #     "billing.env"
     #   ]
-    #   mounts = []
-    local in_environments_section=false
-    local in_mounts_array=false
+    #   mount_paths = []
+    local in_mount_paths_array=false
     local mount_paths=""
     local array_content=""
-    local found_mounts_field=false
+    local found_mount_paths_field=false
     
     while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
         local line
@@ -503,83 +479,69 @@ parse_toml_mounts() {
         # Skip empty lines
         [[ -z "$line" ]] && continue
         
-        # Check if the line is the expected section header
-        if check_toml_section_header "$line" "environments"; then
-            in_environments_section=true
-            in_mounts_array=false
-            array_content=""
-            continue
-        fi
-        
-        # If another section header is found, we're no longer in environments
+        # If we hit a section header, we're no longer at top level
         if [[ "$line" =~ ^\[\[.*\]\] ]] || [[ "$line" =~ ^\[.*\] ]]; then
-            in_environments_section=false
-            in_mounts_array=false
-            array_content=""
-            continue
+            break
         fi
         
-        # Only process if we're in an environments section
-        if [[ "$in_environments_section" == "true" ]]; then
-            # Check for mounts = [...] on a single line
-            if [[ "$line" =~ ^mounts[[:space:]]*=[[:space:]]*\[.*\] ]]; then
-                found_mounts_field=true
-                # Extract content between [ and ]
-                local array_part="${line#*\[}"
-                array_part="${array_part%\]*}"
-                array_content="$array_part"
-                in_mounts_array=false  # Array is complete on one line
-                
-                # Extract quoted strings from the array content
+        # Check for mount_paths = [...] on a single line
+        if [[ "$line" =~ ^mount_paths[[:space:]]*=[[:space:]]*\[.*\] ]]; then
+            found_mount_paths_field=true
+            # Extract content between [ and ]
+            local array_part="${line#*\[}"
+            array_part="${array_part%\]*}"
+            array_content="$array_part"
+            in_mount_paths_array=false  # Array is complete on one line
+            
+            # Extract quoted strings from the array content
+            while [[ "$array_content" =~ \"([^\"]+)\" ]]; do
+                mount_paths="${mount_paths}${BASH_REMATCH[1]}"$'\n'
+                # Remove the matched string and any following comma/whitespace
+                array_content="${array_content#*\"${BASH_REMATCH[1]}\"}"
+                array_content=$(echo "$array_content" | sed 's/^[[:space:]]*,[[:space:]]*//;s/^[[:space:]]*//')
+            done
+        # Check for mount_paths = [ (multi-line array start)
+        elif [[ "$line" =~ ^mount_paths[[:space:]]*=[[:space:]]*\[ ]]; then
+            found_mount_paths_field=true
+            in_mount_paths_array=true
+            # Extract any content after the opening [
+            array_content="${line#*\[}"
+            array_content=$(echo "$array_content" | sed 's/^[[:space:]]*//')
+            # If array closes on same line, process it
+            if [[ "$array_content" =~ \] ]]; then
+                array_content="${array_content%\]*}"
                 while [[ "$array_content" =~ \"([^\"]+)\" ]]; do
                     mount_paths="${mount_paths}${BASH_REMATCH[1]}"$'\n'
-                    # Remove the matched string and any following comma/whitespace
                     array_content="${array_content#*\"${BASH_REMATCH[1]}\"}"
                     array_content=$(echo "$array_content" | sed 's/^[[:space:]]*,[[:space:]]*//;s/^[[:space:]]*//')
                 done
-            # Check for mounts = [ (multi-line array start)
-            elif [[ "$line" =~ ^mounts[[:space:]]*=[[:space:]]*\[ ]]; then
-                found_mounts_field=true
-                in_mounts_array=true
-                # Extract any content after the opening [
-                array_content="${line#*\[}"
-                array_content=$(echo "$array_content" | sed 's/^[[:space:]]*//')
-                # If array closes on same line, process it
-                if [[ "$array_content" =~ \] ]]; then
-                    array_content="${array_content%\]*}"
-                    while [[ "$array_content" =~ \"([^\"]+)\" ]]; do
-                        mount_paths="${mount_paths}${BASH_REMATCH[1]}"$'\n'
-                        array_content="${array_content#*\"${BASH_REMATCH[1]}\"}"
-                        array_content=$(echo "$array_content" | sed 's/^[[:space:]]*,[[:space:]]*//;s/^[[:space:]]*//')
-                    done
-                    in_mounts_array=false
-                    array_content=""
-                fi
-            # If we're in a mounts array, collect lines until we hit ]
-            elif [[ "$in_mounts_array" == "true" ]]; then
-                # Check if this line closes the array
-                if [[ "$line" =~ \] ]]; then
-                    # Extract content before the closing ]
-                    local line_content="${line%\]*}"
-                    array_content="${array_content} ${line_content}"
-                    # Process the complete array content
-                    while [[ "$array_content" =~ \"([^\"]+)\" ]]; do
-                        mount_paths="${mount_paths}${BASH_REMATCH[1]}"$'\n'
-                        array_content="${array_content#*\"${BASH_REMATCH[1]}\"}"
-                        array_content=$(echo "$array_content" | sed 's/^[[:space:]]*,[[:space:]]*//;s/^[[:space:]]*//')
-                    done
-                    in_mounts_array=false
-                    array_content=""
-                else
-                    # Add this line to array content
-                    array_content="${array_content} ${line}"
-                fi
+                in_mount_paths_array=false
+                array_content=""
+            fi
+        # If we're in a mount_paths array, collect lines until we hit ]
+        elif [[ "$in_mount_paths_array" == "true" ]]; then
+            # Check if this line closes the array
+            if [[ "$line" =~ \] ]]; then
+                # Extract content before the closing ]
+                local line_content="${line%\]*}"
+                array_content="${array_content} ${line_content}"
+                # Process the complete array content
+                while [[ "$array_content" =~ \"([^\"]+)\" ]]; do
+                    mount_paths="${mount_paths}${BASH_REMATCH[1]}"$'\n'
+                    array_content="${array_content#*\"${BASH_REMATCH[1]}\"}"
+                    array_content=$(echo "$array_content" | sed 's/^[[:space:]]*,[[:space:]]*//;s/^[[:space:]]*//')
+                done
+                in_mount_paths_array=false
+                array_content=""
+            else
+                # Add this line to array content
+                array_content="${array_content} ${line}"
             fi
         fi
     done < "$toml_file"
     
-    # If mounts field was found, return success (even if empty)
-    if [[ "$found_mounts_field" == "true" ]]; then
+    # If mount_paths field was found, return success (even if empty)
+    if [[ "$found_mount_paths_field" == "true" ]]; then
         # Remove trailing newline and return
         if [[ -n "$mount_paths" ]]; then
             mount_paths=$(echo "$mount_paths" | sed '/^$/d')
@@ -643,25 +605,25 @@ for workspace_root in "${workspace_roots_array[@]}"; do
     toml_file="${workspace_root}/.1password/environments.toml"
     use_configured_mode=false
     
-    # Check if TOML exists and has mounts field
+    # Check if TOML exists and has mount_paths field
     if [[ -f "$toml_file" ]]; then
-        log "Found environments.toml at ${toml_file}, checking for mounts field..."
+        log "Found environments.toml at ${toml_file}, checking for mount_paths field..."
         
-        if has_toml_mounts_field "$toml_file"; then
+        if has_toml_mount_paths_field "$toml_file"; then
             use_configured_mode=true
-            log "environments.toml has mounts field defined - validating specified mounts"
+            log "environments.toml has mount_paths field defined - validating specified mounts"
             
-            # Parse and validate TOML mounts
-            toml_mounts=$(parse_toml_mounts "$toml_file")
+            # Parse and validate TOML mount paths
+            toml_mounts=$(parse_toml_mount_paths "$toml_file")
             if [[ $? -ne 0 ]]; then
                 log "Warning: Failed to parse environments.toml at ${toml_file}, falling back to default mode"
                 use_configured_mode=false
             elif [[ -z "$toml_mounts" ]]; then
-                log "environments.toml specifies mounts = [] - no local .env files to validate for this workspace"
+                log "environments.toml specifies mount_paths = [] - no local .env files to validate for this workspace"
                 continue
             fi
         else
-            log "environments.toml exists but does not specify a mounts field, using default mode (checking all mounts)"
+            log "environments.toml exists but does not specify a mount_paths field, using default mode (checking all mounts)"
         fi
     else
         log "No environments.toml found at ${workspace_root}/.1password/environments.toml, using default mode (checking all mounts)"
