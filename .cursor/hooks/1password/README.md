@@ -6,7 +6,7 @@ This directory includes a hook that validates locally mounted .env files from [1
 
 ### General Description
 
-Every time Cursor attempts to execute a shell command, the [`1password-verify-environments.sh`](./1password-verify-environments.sh) script will run and query 1Password for your configured [local .env files](https://developer.1password.com/docs/environments/local-env-file). It will then validate that each file is enabled, and exists as a valid FIFO (named pipe). When validation fails, the hook blocks command execution and provides clear error messages indicating which files are missing or need to be enabled from the 1Password app. The Cursor Agent will then guide you towards a proper configuration.
+Every time Cursor attempts to execute a shell command, the [`validate-mounted-env-files.sh`](./validate-mounted-env-files.sh) script will run and query 1Password for your configured [local .env files](https://developer.1password.com/docs/environments/local-env-file). It will then validate that each file is enabled, and exists as a valid FIFO (named pipe). When validation fails, the hook blocks command execution and provides clear error messages indicating which files are missing or need to be enabled from the 1Password app. The Cursor Agent will then guide you towards a proper configuration.
 
 Note: [Local .env files](https://developer.1password.com/docs/environments/local-env-file) from 1Password Environments are only available on Mac and Linux. Windows is not yet supported. If you're on Windows, Cursor will automatically skip any validations.
 
@@ -130,7 +130,7 @@ Add the following to `hooks.json` within your project:
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": ".cursor/hooks/verify-environments/1password-verify-environments.sh"
+        "command": ".cursor/hooks/1password/validate-mounted-env-files.sh"
       }
     ]
   }
@@ -162,7 +162,7 @@ If the hook is not working as expected, there are several ways to gather more in
 The easiest way to see if the hook is running and view its output is through Cursor's execution log:
 
 1. Open **Settings** > **Hooks** > **Execution Log**.
-2. Look for entries related to `beforeShellExecution` and `1password-verify-environments.sh`.
+2. Look for entries related to `beforeShellExecution` and `validate-mounted-env-files.sh`.
 3. Each entry shows whether the hook ran successfully, its output, and any error messages.
 
 This log helps you verify that:
@@ -187,7 +187,7 @@ The hook expects JSON input on stdin with the following format:
 Run the hook with `DEBUG=1` to output logs directly to the shell:
 
 ```bash
-DEBUG=1 echo '{"command": "echo test", "workspace_roots": ["/path/to/project"]}' | ./.cursor/hooks/verify-environments/1password-verify-environments.sh
+DEBUG=1 echo '{"command": "echo test", "workspace_roots": ["/path/to/project"]}' | ./.cursor/hooks/1password/validate-mounted-env-files.sh
 ```
 
 The hook outputs JSON to stdout:
