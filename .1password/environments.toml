@@ -1,2 +1,0 @@
-[[environments]]
-mounts = [".env"]
