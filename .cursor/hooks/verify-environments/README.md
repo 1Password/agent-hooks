@@ -1,4 +1,4 @@
-# 1Password Mounted .env File Validation
+# Cursor Hook: Local .env File Validation for 1Password Environments
 
 This directory includes a hook that validates locally mounted .env files from [1Password Environments](https://developer.1password.com/docs/environments) to make sure they're properly mounted. The hook automatically discovers configured .env files and prevents command execution in Cursor when required files are missing or invalid.
 
@@ -8,7 +8,7 @@ This directory includes a hook that validates locally mounted .env files from [1
 
 Every time Cursor attempts to execute a shell command, the [`1password-verify-environments.sh`](./1password-verify-environments.sh) script will run and query 1Password for your configured [local .env files](https://developer.1password.com/docs/environments/local-env-file). It will then validate that each file is enabled, and exists as a valid FIFO (named pipe). When validation fails, the hook blocks command execution and provides clear error messages indicating which files are missing or need to be enabled from the 1Password app. The Cursor Agent will then guide you towards a proper configuration.
 
-Note: [Local .env files](https://developer.1password.com/docs/environments/local-env-file) from 1Password are only available on Mac and Linux. Windows is not yet supported.
+Note: [Local .env files](https://developer.1password.com/docs/environments/local-env-file) from 1Password Environments are only available on Mac and Linux. Windows is not yet supported.
 
 ### Intended Cursor Event
 
@@ -112,9 +112,7 @@ No `.1password/environments.toml` file exists. The hook discovers and validates 
 
 ### Windows Not Supported
 
-Local .env file mounting relies on FIFO (named pipe) files, which are only supported on macOS and Linux. As a result, this feature and hook is currently unavailable on Windows platforms.
-
-If you're on Windows, this hook will be skipped automatically.
+[Local .env files](https://developer.1password.com/docs/environments/local-env-file/) are only supported on Mac and Linux at this time. If you're on Windows, Cursor will automatically skip the hook.
 
 ## Configuration
 
