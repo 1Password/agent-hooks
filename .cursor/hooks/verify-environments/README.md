@@ -16,7 +16,7 @@ This hook is intended to be used with the **`beforeShellExecution`** event. When
 
 ## Functionality
 
-The hook supports two validation modes: **default** (when no configuration is provided) and **configured** (when a TOML configuration file is present and properly defined).
+The hook supports two validation modes: **configured** (when a TOML configuration file is present and properly defined) and **default** (when no configuration is provided).
 
 ### Configured Mode
 
