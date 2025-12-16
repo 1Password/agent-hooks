@@ -1,6 +1,6 @@
 # 1Password Mounted .env File Validation
 
-This directory includes a hook that validates locally mounted .env files from [1Password Environments](https://developer.1password.com/docs/environments) to ensure they are properly mounted. The hook automatically discovers configured files and prevents command execution in Cursor when required files are missing or invalid.
+This directory includes a hook that validates locally mounted .env files from [1Password Environments](https://developer.1password.com/docs/environments) to make sure they're properly mounted. The hook automatically discovers configured .env files and prevents command execution in Cursor when required files are missing or invalid.
 
 ## Details
 
