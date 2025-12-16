@@ -12,7 +12,7 @@ Note: [Local .env files](https://developer.1password.com/docs/environments/local
 
 ### Intended Cursor Event
 
-This hook is intended to be used with the **`beforeShellExecution`** event. When configured with this event, the hook runs before the Cursor executes any commands, preventing the Agent from running when required environment files are not available.
+This hook is intended to be used with the **`beforeShellExecution`** event. When configured with this event, the hook runs before Cursor executes any commands, preventing the Agent from running when required environment files are not available.
 
 ## Functionality
 
