@@ -118,7 +118,7 @@ If you're on Windows, this hook will be skipped automatically.
 
 ## Configuration
 
-Hooks can be configured at multiple levels. Simply add the hook file to the desired location and then configure it in the corresponding `hooks.json` file, and the behaviour will become available:
+Hooks can be configured at multiple levels. To do this, add the hook file to the desired location and then configure it in the corresponding `hooks.json` file, and the behavior will become available:
 
 - **Project-specific**: `.cursor/hooks.json` in the project root (applies only to that project).
 - **User-specific**: `~/.cursor/hooks.json` or similar user configuration directory (applies to all projects for that user).
