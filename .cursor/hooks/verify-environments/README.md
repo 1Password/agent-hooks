@@ -8,7 +8,7 @@ This directory includes a hook that validates locally mounted .env files from [1
 
 Every time Cursor attempts to execute a shell command, the [`1password-verify-environments.sh`](./1password-verify-environments.sh) script will run and query 1Password for your configured [local .env files](https://developer.1password.com/docs/environments/local-env-file). It will then validate that each file is enabled, and exists as a valid FIFO (named pipe). When validation fails, the hook blocks command execution and provides clear error messages indicating which files are missing or need to be enabled from the 1Password app. The Cursor Agent will then guide you towards a proper configuration.
 
-Note: [Local .env files](https://developer.1password.com/docs/environments/local-env-file) from 1Password are only available on macOS and Linux. Windows is not yet supported.
+Note: [Local .env files](https://developer.1password.com/docs/environments/local-env-file) from 1Password are only available on Mac and Linux. Windows is not yet supported.
 
 ### Intended Cursor Event
 
