@@ -4,13 +4,13 @@
   "title": "Canonical Hook Input",
   "description": "Normalized JSON that adapters produce on stdin for hook scripts.",
   "type": "object",
-  "required": ["ide", "event", "type", "workspace_roots", "cwd", "command", "raw_payload"],
+  "required": ["client", "event", "type", "workspace_roots", "cwd", "command", "raw_payload"],
   "additionalProperties": false,
   "properties": {
-    "ide": {
+    "client": {
       "type": "string",
       "enum": ["cursor", "windsurf", "claude", "github-copilot", "unknown"],
-      "description": "Identifier of the calling IDE."
+      "description": "Identifier of the calling agentic client."
     },
     "event": {
       "type": "string",
