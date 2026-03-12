@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/1Password/ide-hooks/schemas/hook-input.schema.json",
+  "title": "Canonical Hook Input",
+  "description": "Normalized JSON that adapters produce on stdin for hook scripts.",
+  "type": "object",
+  "required": ["client", "event", "type", "workspace_roots", "cwd", "command", "raw_payload"],
+  "additionalProperties": false,
+  "properties": {
+    "client": {
+      "type": "string",
+      "enum": ["cursor", "windsurf", "claude", "github-copilot", "unknown"],
+      "description": "Identifier of the calling agentic client."
+    },
+    "event": {
+      "type": "string",
+      "enum": ["before_shell_execution"],
+      "description": "Canonical event name. Currently only 'before_shell_execution' is supported."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["command"],
+      "description": "Action category as defined by the IDE's hook system. Currently only 'command' (shell execution) is supported."
+    },
+    "workspace_roots": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Absolute paths to workspace root directories. Empty array if the IDE does not provide workspace info."
+    },
+    "cwd": {
+      "type": "string",
+      "description": "Current working directory of the action. Falls back to the first workspace_roots entry if the IDE payload omits it. Empty string only when truly unavailable."
+    },
+    "command": {
+      "type": "string",
+      "description": "Shell command string about to be executed."
+    },
+    "tool_name": {
+      "type": "string",
+      "default": "",
+      "description": "IDE tool identifier from the payload (e.g. 'Bash', 'run_in_terminal'). Empty string when not applicable."
+    },
+    "raw_payload": {
+      "type": "object",
+      "description": "The original, unmodified JSON payload from the IDE, preserved verbatim."
+    }
+  }
+}
