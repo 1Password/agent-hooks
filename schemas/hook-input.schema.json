@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/1Password/ide-hooks/schemas/hook-input.schema.json",
   "title": "Canonical Hook Input",
-  "description": "Normalized JSON that adapters produce on stdin for hook scripts. See docs/canonical-contract.md for full specification.",
+  "description": "Normalized JSON that adapters produce on stdin for hook scripts.",
   "type": "object",
   "required": ["ide", "event", "type", "workspace_roots", "cwd", "command", "raw_payload"],
   "additionalProperties": false,

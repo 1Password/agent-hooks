@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/1Password/ide-hooks/schemas/hook-output.schema.json",
   "title": "Canonical Hook Output",
-  "description": "Normalized JSON that hook scripts produce on stdout. See docs/canonical-contract.md for full specification.",
+  "description": "Normalized JSON that hook scripts produce on stdout.",
   "type": "object",
   "required": ["decision", "message"],
   "additionalProperties": false,
