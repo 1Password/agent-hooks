@@ -12,11 +12,11 @@ source "${_LIB_DIR}/logging.sh"
 # Escape JSON string value (returns escaped string without quotes)
 escape_json_string() {
     local str="$1"
-    str=$(echo "$str" | sed 's/\\/\\\\/g')
-    str=$(echo "$str" | sed 's/"/\\"/g')
-    str=$(echo "$str" | sed 's/\n/\\n/g')
-    str=$(echo "$str" | sed 's/\r/\\r/g')
-    str=$(echo "$str" | sed 's/\t/\\t/g')
+    str="${str//\\/\\\\}"
+    str="${str//\"/\\\"}"
+    str="${str//$'\n'/\\n}"
+    str="${str//$'\r'/\\r}"
+    str="${str//$'\t'/\\t}"
     echo "$str"
 }
 
@@ -51,15 +51,15 @@ parse_json_workspace_roots() {
     local array_lines=""
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if echo "$line" | grep -qE '"workspace_roots"[[:space:]]*:[[:space:]]*\['; then
+        if [[ "$line" =~ \"workspace_roots\"[[:space:]]*:[[:space:]]*\[ ]]; then
             in_array=true
             array_lines="${line#*\[}"
-            if echo "$array_lines" | grep -qE '\]'; then
+            if [[ "$array_lines" =~ \] ]]; then
                 array_lines="${array_lines%\]*}"
                 break
             fi
         elif [[ "$in_array" == "true" ]]; then
-            if echo "$line" | grep -qE '\]'; then
+            if [[ "$line" =~ \] ]]; then
                 array_lines="${array_lines} ${line%\]*}"
                 break
             else
@@ -68,14 +68,17 @@ parse_json_workspace_roots() {
         fi
     done <<< "$json_input"
 
-    echo "$array_lines" | grep -oE '"[^"]+"' \
-        | sed 's/^"//;s/"$//' \
-        | sed '/^$/d' || true
+    local result=""
+    while [[ "$array_lines" =~ \"([^\"]+)\" ]]; do
+        [[ -n "${BASH_REMATCH[1]}" ]] && result="${result:+${result}$'\n'}${BASH_REMATCH[1]}"
+        array_lines="${array_lines#*"${BASH_REMATCH[0]}"}"
+    done
+    [[ -n "$result" ]] && echo "$result" || true
 
     return 0
 }
 
-# Check whether a top-level key exists in a JSON object.
+# Check whether a key exists anywhere in a JSON object.
 # Usage: json_has_key "$json" "field_name" && echo "exists"
 json_has_key() {
     local json="$1"
