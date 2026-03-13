@@ -1,12 +1,3 @@
-<<<<<<< HEAD
-#!/bin/bash
-# Shared: logging for hook scripts.
-# Placeholder stubs only; implement as needed.
-
-log() {
-    # Placeholder: no-op.
-    :
-=======
 # Shared logging utilities for ide-hooks.
 # Source this file; it defines functions only.
 #
@@ -30,5 +21,4 @@ log() {
         local log_file="${LOG_FILE:-/tmp/1password-hooks.log}"
         echo "$log_message" >> "$log_file" 2>/dev/null || true
     fi
->>>>>>> feature/multi-ide-hooks-refactor
 }

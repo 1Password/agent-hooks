@@ -1,12 +1,3 @@
-<<<<<<< HEAD
-#!/bin/bash
-# Shared: OS detection and platform-specific path constants.
-# Placeholder stubs only; implement as needed.
-
-detect_os() {
-    # Placeholder: return unknown.
-    echo "unknown"
-=======
 # Shared OS detection utilities for ide-hooks.
 # Source this file; it defines functions only and has no side effects.
 
@@ -33,5 +24,4 @@ detect_os() {
             echo "unknown"
             ;;
     esac
->>>>>>> feature/multi-ide-hooks-refactor
 }

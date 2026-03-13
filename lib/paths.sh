@@ -1,17 +1,3 @@
-<<<<<<< HEAD
-#!/bin/bash
-# Shared: path validation, normalization, and resolution.
-# Placeholder stubs only; implement as needed.
-
-validate_path() {
-    # Placeholder: treat all paths as safe.
-    return 0
-}
-
-normalize_path() {
-    # Placeholder: return path as-is.
-    echo "$1"
-=======
 # Shared path utilities for ide-hooks.
 # Source this file; it defines functions only and has no side effects.
 
@@ -102,5 +88,4 @@ normalize_path() {
 
     # Last resort: return path as-is
     echo "$path"
->>>>>>> feature/multi-ide-hooks-refactor
 }

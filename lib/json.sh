@@ -1,14 +1,3 @@
-<<<<<<< HEAD
-#!/bin/bash
-# Shared: JSON utilities for hook scripts.
-# Placeholder stubs only; implement as needed.
-
-escape_json_string() {
-    # Placeholder: return argument as-is (no escaping).
-    echo "$1"
-}
-
-=======
 # Shared JSON utilities for ide-hooks.
 # Source this file; it defines functions only and has no side effects.
 #
@@ -96,4 +85,3 @@ json_has_key() {
     local key="$2"
     echo "$json" | grep -qE "\"${key}\"[[:space:]]*:"
 }
->>>>>>> feature/multi-ide-hooks-refactor

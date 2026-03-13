@@ -377,31 +377,6 @@ output_decision() {
     printf '{"decision":"%s","message":"%s"}\n' "$permission" "$msg_escaped"
 }
 
-# Parse canonical JSON and extract workspace_roots array.
-parse_workspace_roots_from_canonical() {
-    local json_input="$1"
-    local in_array=false
-    local array_lines=""
-    while IFS= read -r line || [[ -n "$line" ]]; do
-        if echo "$line" | grep -qE '"workspace_roots"[[:space:]]*:[[:space:]]*\['; then
-            in_array=true
-            array_lines="${line#*\[}"
-            if echo "$array_lines" | grep -qE '\]'; then
-                array_lines="${array_lines%\]*}"
-                break
-            fi
-        elif [[ "$in_array" == "true" ]]; then
-            if echo "$line" | grep -qE '\]'; then
-                array_lines="${array_lines} ${line%\]*}"
-                break
-            else
-                array_lines="${array_lines} ${line}"
-            fi
-        fi
-    done <<< "$json_input"
-    echo "$array_lines" | grep -oE '"[^"]+"' | sed 's/^"//;s/"$//' | sed '/^$/d'
-}
-
 # ============================================================================
 # MAIN EXECUTION LOGIC
 # ============================================================================
@@ -413,7 +388,7 @@ log "Checking for local .env files mounted by 1Password..."
 canonical_input=$(cat)
 
 # Extract workspace_roots from canonical input.
-workspace_roots_input=$(parse_workspace_roots_from_canonical "$canonical_input")
+workspace_roots_input=$(parse_json_workspace_roots "$canonical_input")
 workspace_roots_array=()
 while IFS= read -r workspace_root || [[ -n "$workspace_root" ]]; do
     [[ -z "$workspace_root" ]] && continue
