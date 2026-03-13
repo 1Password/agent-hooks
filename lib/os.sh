@@ -8,7 +8,7 @@ _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_LIB_DIR}/logging.sh"
 
 # Detect the host operating system.
-# Prints one of: "macos", "linux", "unknown"
+# Prints one of: "macos", "unix", "unknown"
 detect_os() {
     case "$(uname -s)" in
         Darwin*)

@@ -140,5 +140,5 @@ setup() {
 }
 
 @test "json_has_key does not match partial key names" {
-    ! json_has_key '{"workspace_roots_extra": []}' "workspace_roots\""
+    ! json_has_key '{"workspace_roots_extra": []}' "workspace_roots"
 }

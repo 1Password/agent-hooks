@@ -12,11 +12,11 @@ source "${_LIB_DIR}/logging.sh"
 # Escape JSON string value (returns escaped string without quotes)
 escape_json_string() {
     local str="$1"
-    str=$(echo "$str" | sed 's/\\/\\\\/g')
-    str=$(echo "$str" | sed 's/"/\\"/g')
-    str=$(echo "$str" | sed 's/\n/\\n/g')
-    str=$(echo "$str" | sed 's/\r/\\r/g')
-    str=$(echo "$str" | sed 's/\t/\\t/g')
+    str="${str//\\/\\\\}"
+    str="${str//\"/\\\"}"
+    str="${str//$'\n'/\\n}"
+    str="${str//$'\r'/\\r}"
+    str="${str//$'\t'/\\t}"
     echo "$str"
 }
 
@@ -75,7 +75,7 @@ parse_json_workspace_roots() {
     return 0
 }
 
-# Check whether a top-level key exists in a JSON object.
+# Check whether a key exists anywhere in a JSON object.
 # Usage: json_has_key "$json" "field_name" && echo "exists"
 json_has_key() {
     local json="$1"
