@@ -1,4 +1,4 @@
-# Shared OS detection utilities for ide-hooks.
+# Shared OS detection utilities for agent-hooks.
 # Source this file; it defines functions only and has no side effects.
 
 [[ -n "${_LIB_OS_LOADED:-}" ]] && return 0

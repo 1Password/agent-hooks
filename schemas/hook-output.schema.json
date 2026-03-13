@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/1Password/ide-hooks/schemas/hook-output.schema.json",
+  "$id": "https://github.com/1Password/agent-hooks/schemas/hook-output.schema.json",
   "title": "Canonical Hook Output",
   "description": "Normalized JSON that hook scripts produce on stdout.",
   "type": "object",

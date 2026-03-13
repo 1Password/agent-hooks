@@ -1,4 +1,4 @@
-# Shared JSON utilities for ide-hooks.
+# Shared JSON utilities for agent-hooks.
 # Source this file; it defines functions only and has no side effects.
 #
 # Pure-bash JSON helpers that avoid a hard dependency on jq.

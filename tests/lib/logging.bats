@@ -30,14 +30,14 @@ setup() {
     rm -f "$tmpfile"
 }
 
-@test "log uses default tag ide-hooks when LOG_TAG is unset" {
+@test "log uses default tag agent-hooks when LOG_TAG is unset" {
     local tmpfile
     tmpfile=$(mktemp)
 
     unset LOG_TAG
     LOG_FILE="$tmpfile" log "default tag"
 
-    grep -q "\[ide-hooks\]" "$tmpfile"
+    grep -q "\[agent-hooks\]" "$tmpfile"
     rm -f "$tmpfile"
 }
 
