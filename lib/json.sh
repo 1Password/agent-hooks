@@ -51,15 +51,15 @@ parse_json_workspace_roots() {
     local array_lines=""
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if echo "$line" | grep -qE '"workspace_roots"[[:space:]]*:[[:space:]]*\['; then
+        if [[ "$line" =~ \"workspace_roots\"[[:space:]]*:[[:space:]]*\[ ]]; then
             in_array=true
             array_lines="${line#*\[}"
-            if echo "$array_lines" | grep -qE '\]'; then
+            if [[ "$array_lines" =~ \] ]]; then
                 array_lines="${array_lines%\]*}"
                 break
             fi
         elif [[ "$in_array" == "true" ]]; then
-            if echo "$line" | grep -qE '\]'; then
+            if [[ "$line" =~ \] ]]; then
                 array_lines="${array_lines} ${line%\]*}"
                 break
             else
@@ -68,9 +68,12 @@ parse_json_workspace_roots() {
         fi
     done <<< "$json_input"
 
-    echo "$array_lines" | grep -oE '"[^"]+"' \
-        | sed 's/^"//;s/"$//' \
-        | sed '/^$/d' || true
+    local result=""
+    while [[ "$array_lines" =~ \"([^\"]+)\" ]]; do
+        [[ -n "${BASH_REMATCH[1]}" ]] && result="${result:+${result}$'\n'}${BASH_REMATCH[1]}"
+        array_lines="${array_lines#*"${BASH_REMATCH[0]}"}"
+    done
+    [[ -n "$result" ]] && echo "$result" || true
 
     return 0
 }
