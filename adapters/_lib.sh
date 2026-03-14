@@ -1,0 +1,87 @@
+# Shared adapter utilities for agent-hooks.
+# Source this file; it defines functions only and has no side effects.
+#
+# Each adapter must implement three functions:
+#   ide_detect "$raw_payload"       — print "yes" or "no"
+#   normalize_input "$raw_payload"  — print canonical JSON to stdout
+#   emit_output "$canonical_output" — print IDE-native response, set exit code
+
+[[ -n "${_ADAPTERS_LIB_LOADED:-}" ]] && return 0
+_ADAPTERS_LIB_LOADED=1
+
+_ADAPTERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${_ADAPTERS_DIR}/../lib/json.sh"
+
+# Build canonical JSON from extracted fields.
+# Embeds raw_payload as a nested JSON object.
+# Usage: build_canonical_input "$ide" "$event" "$type" "$workspace_roots_json_array" "$cwd" "$command" "$tool_name" "$raw_payload"
+build_canonical_input() {
+    local client="$1"
+    local event="$2"
+    local type="$3"
+    local workspace_roots_json_array="$4"
+    local cwd="$5"
+    local command="$6"
+    local tool_name="$7"
+    local raw_payload="$8"
+
+    local escaped_cwd escaped_command escaped_tool_name
+    escaped_cwd=$(escape_json_string "$cwd")
+    escaped_command=$(escape_json_string "$command")
+    escaped_tool_name=$(escape_json_string "$tool_name")
+
+    # Multi-line output so that line-by-line JSON parsers (parse_json_workspace_roots)
+    # can match top-level fields without colliding with keys inside raw_payload.
+    cat <<CANONICAL_EOF
+{
+"client": "${client}",
+"event": "${event}",
+"type": "${type}",
+"workspace_roots": ${workspace_roots_json_array},
+"cwd": "${escaped_cwd}",
+"command": "${escaped_command}",
+"tool_name": "${escaped_tool_name}",
+"raw_payload": ${raw_payload}
+}
+CANONICAL_EOF
+}
+
+# Convert a newline-separated list of paths into a JSON array string.
+# Usage: paths_to_json_array "$paths_newline_separated"
+# Output: ["/path/a","/path/b"]
+paths_to_json_array() {
+    local paths="$1"
+    if [[ -z "$paths" ]]; then
+        echo "[]"
+        return 0
+    fi
+
+    local result="["
+    local first=true
+    while IFS= read -r p || [[ -n "$p" ]]; do
+        [[ -z "$p" ]] && continue
+        local escaped
+        escaped=$(escape_json_string "$p")
+        if [[ "$first" == "true" ]]; then
+            result="${result}\"${escaped}\""
+            first=false
+        else
+            result="${result},\"${escaped}\""
+        fi
+    done <<< "$paths"
+    result="${result}]"
+
+    echo "$result"
+}
+
+# Extract decision from canonical output JSON.
+# Usage: get_decision "$canonical_output"
+get_decision() {
+    extract_json_string "$1" "decision"
+}
+
+# Extract message from canonical output JSON.
+# Usage: get_message "$canonical_output"
+get_message() {
+    extract_json_string "$1" "message"
+}
