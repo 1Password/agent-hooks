@@ -17,13 +17,12 @@ fi
 CONFIG_PATH="${REPO_ROOT}/${CONFIG_NAME}"
 
 usage() {
-  echo "Usage: $0 [--agent cursor|github-copilot] [--scope user|project] [--target-dir DIR]"
+  echo "Usage: $0 --agent cursor|github-copilot [--scope user|project] [--target-dir DIR]"
   echo ""
-  echo "  --agent      Agent to install (default: cursor)"
+  echo "  --agent      (required) Agent to install (example: cursor, github-copilot)"
   echo "  --scope      user = use user paths (e.g. under $HOME). project = use project paths (default; use with --target-dir to install into another repo)."
-  echo "  --target-dir Install into DIR (e.g. install from this repo into another: --target-dir /path/to/other/repo)"
+  echo "  --target-dir Install into DIR (example: install from this repo into another: --target-dir /path/to/other/repo)"
   echo ""
-  echo "This script only copies files. It does not create or edit hooks.json; add hook entries yourself."
   exit 1
 }
 
@@ -121,7 +120,7 @@ is_unsafe_segment() {
 }
 
 # ---- Main ----
-AGENT="cursor"
+AGENT=""
 SCOPE="project"
 TARGET_DIR=""
 
@@ -156,6 +155,11 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1" >&2; usage ;;
   esac
 done
+
+if [[ -z "$AGENT" ]]; then
+  echo "Error: --agent is required (cursor or github-copilot)" >&2
+  usage
+fi
 
 if [[ "$SCOPE" != "user" && "$SCOPE" != "project" ]]; then
   echo "Error: --scope must be 'user' or 'project'"
