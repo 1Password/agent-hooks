@@ -102,12 +102,13 @@ get_hook_events() {
 # Call after reading install_dir and config_path from config.
 is_unsafe_relative_path() {
   local path="$1"
-  [[ "$path" == *"/../"* ]] && return 0   # contains /../
-  [[ "$path" == *"/.." ]] && return 0     # ends with /..
-  [[ "$path" == "../"* ]] && return 0     # starts with ../
-  [[ "$path" == ".." ]] && return 0       # exactly ..
+  [[ "$path" == *"/../"* ]] && return 0
+  [[ "$path" == *"/.." ]] && return 0
+  [[ "$path" == "../"* ]] && return 0
+  [[ "$path" == ".." ]] && return 0
   return 1
 }
+
 # Reject adapter or hook name that could be used for path traversal.
 # Names must be a single segment (no slashes) and not . or ..
 is_unsafe_segment() {
