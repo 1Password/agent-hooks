@@ -1,0 +1,30 @@
+{
+    "cursor": {
+      "adapters": ["_lib.sh", "cursor.sh", "generic.sh"],
+      "hook_events": {
+        "beforeShellExecution": ["1password-validate-mounted-env-files"]
+      },
+      "user": {
+        "install_dir": ".cursor/agent-hooks",
+        "config_path": ".cursor/hooks.json"
+      },
+      "project": {
+        "install_dir": ".cursor/agent-hooks",
+        "config_path": ".cursor/hooks.json"
+      }
+    },
+    "github-copilot": {
+      "adapters": ["_lib.sh", "generic.sh", "github-copilot.sh"],
+      "hook_events": {
+        "PreToolUse": ["1password-validate-mounted-env-files"]
+      },
+      "user": {
+        "install_dir": ".config/github-copilot/agent-hooks",
+        "config_path": ".config/github-copilot/hooks.json"
+      },
+      "project": {
+        "install_dir": ".github/agent-hooks",
+        "config_path": ".github/hooks.json"
+      }
+    }
+  }
