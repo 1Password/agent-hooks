@@ -20,14 +20,14 @@ usage() {
   echo "Usage: $0 [--agent cursor|github-copilot] [--scope user|project] [--target-dir DIR]"
   echo ""
   echo "  --agent      Agent to install (default: cursor)"
-  echo "  --scope      user = \$HOME, project = current dir (default: project). Ignored if --target-dir is set."
+  echo "  --scope      user = use user paths (e.g. under $HOME). project = use project paths (default; use with --target-dir to install into another repo)."
   echo "  --target-dir Install into DIR (e.g. install from this repo into another: --target-dir /path/to/other/repo)"
   echo ""
   echo "This script only copies files. It does not create or edit hooks.json; add hook entries yourself."
   exit 1
 }
 
-# ---- Config parsing (no jq) ----
+# ---- Config parsing ----
 # Get the JSON object value for key (first occurrence), by brace counting.
 get_json_block() {
   local content="$1"
