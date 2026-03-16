@@ -98,6 +98,27 @@ get_hook_events() {
   done
 }
 
+# Reject relative path if it could escape the base (path traversal).
+# Call after reading install_dir and config_path from config.
+is_unsafe_relative_path() {
+  local path="$1"
+  [[ "$path" == *"/../"* ]] && return 0   # contains /../
+  [[ "$path" == *"/.." ]] && return 0     # ends with /..
+  [[ "$path" == "../"* ]] && return 0     # starts with ../
+  [[ "$path" == ".." ]] && return 0       # exactly ..
+  return 1
+}
+# Reject adapter or hook name that could be used for path traversal.
+# Names must be a single segment (no slashes) and not . or ..
+is_unsafe_segment() {
+  local name="$1"
+  [[ -z "$name" ]] && return 0
+  [[ "$name" == "." ]] && return 0
+  [[ "$name" == *"/"* ]] && return 0
+  is_unsafe_relative_path "$name" && return 0
+  return 1
+}
+
 # ---- Main ----
 AGENT="cursor"
 SCOPE="project"
@@ -165,6 +186,11 @@ if [[ -z "$INSTALL_DIR_REL" || -z "$CONFIG_PATH_REL" ]]; then
   exit 1
 fi
 
+if is_unsafe_relative_path "$INSTALL_DIR_REL" || is_unsafe_relative_path "$CONFIG_PATH_REL"; then
+  echo "Error: install_dir or config_path may not contain '..' (path traversal)." >&2
+  exit 1
+fi
+
 # Resolve base directory
 if [[ -n "${TARGET_DIR:-}" ]]; then
   if [[ ! -d "$TARGET_DIR" ]]; then
@@ -186,8 +212,18 @@ CONFIG_FILE="${BASE}/${CONFIG_PATH_REL}"
 
 echo "Agent: $AGENT | Scope: $SCOPE"
 echo "Install dir:  $INSTALL_DIR"
-echo "Config path: $CONFIG_FILE (not created or modified)"
+echo "Config path: $CONFIG_FILE (created if missing)"
 echo ""
+
+if [[ -d "$INSTALL_DIR" ]] && [[ -t 0 ]]; then
+  echo "1Password agent hooks already installed at: $INSTALL_DIR"
+  echo "This will overwrite with a fresh install. Any changes you made may be lost."
+  read -r -p "Continue? (y/n) " response
+  case "$response" in
+    [yY]|[yY][eE][sS]) ;;
+    *) echo "Aborted."; exit 0 ;;
+  esac
+fi
 
 mkdir -p "${INSTALL_DIR}/bin" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/adapters" "${INSTALL_DIR}/hooks"
 
@@ -200,6 +236,10 @@ done
 # Copy adapters for this agent
 while IFS= read -r adapter; do
   [[ -z "$adapter" ]] && continue
+  if is_unsafe_segment "$adapter"; then
+    echo "Error: invalid adapter name (path traversal): $adapter" >&2
+    exit 1
+  fi
   src="${REPO_ROOT}/adapters/${adapter}"
   if [[ -f "$src" ]]; then
     cp "$src" "${INSTALL_DIR}/adapters/"
@@ -211,6 +251,10 @@ done < <(get_string_array "$AGENT_BLOCK" "adapters")
 # Copy only hooks referenced in hook_events
 while IFS=$'\t' read -r event hook_name; do
   [[ -z "$hook_name" ]] && continue
+  if is_unsafe_segment "$hook_name"; then
+    echo "Error: invalid hook name (path traversal): $hook_name" >&2
+    exit 1
+  fi
   hook_dir="${REPO_ROOT}/hooks/${hook_name}"
   if [[ -d "$hook_dir" && -f "${hook_dir}/hook.sh" ]]; then
     mkdir -p "${INSTALL_DIR}/hooks/${hook_name}"
@@ -220,4 +264,35 @@ while IFS=$'\t' read -r event hook_name; do
   fi
 done < <(get_hook_events "$AGENT_BLOCK")
 
-echo "Done. Add hook entries to your config yourself."
+# Create hooks config only if it doesn't exist
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  mkdir -p "$(dirname "$CONFIG_FILE")"
+  template="${REPO_ROOT}/${CONFIG_PATH_REL}"
+  if [[ -f "$template" ]]; then
+    cp "$template" "$CONFIG_FILE"
+    # Fix command path: project = from repo root; user = from config dir
+    if [[ "$SCOPE" == "project" ]]; then
+      SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
+    else
+      CONFIG_DIR_REL="$(dirname "$CONFIG_PATH_REL")"
+      SCRIPT_PATH_REL="${INSTALL_DIR_REL#${CONFIG_DIR_REL}/}/bin/run-hook.sh"
+    fi
+      # Escape for sed replacement: \ and & are special
+      SCRIPT_PATH_REL_SED="${SCRIPT_PATH_REL//\\/\\\\}"
+      SCRIPT_PATH_REL_SED="${SCRIPT_PATH_REL_SED//&/\\&}"
+    if sed --version 2>/dev/null | grep -q GNU; then
+      sed -i "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE"
+    else
+      sed -i.bak "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE" && rm -f "${CONFIG_FILE}.bak"
+    fi
+    echo "Created $CONFIG_FILE with default hook entries."
+  else
+    echo "Warning: no template at $template; skipping config creation."
+  fi
+else
+  echo "" >&2
+  echo "WARNING: Config already exists at $CONFIG_FILE; update it to add or change hook entries." >&2
+  echo "" >&2
+fi
+
+echo "Done. Hook(s) installed"

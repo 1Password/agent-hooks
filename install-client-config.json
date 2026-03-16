@@ -5,11 +5,11 @@
         "beforeShellExecution": ["1password-validate-mounted-env-files"]
       },
       "user": {
-        "install_dir": ".cursor/agent-hooks",
+        "install_dir": ".cursor/1password-hooks",
         "config_path": ".cursor/hooks.json"
       },
       "project": {
-        "install_dir": ".cursor/agent-hooks",
+        "install_dir": ".cursor/1password-hooks",
         "config_path": ".cursor/hooks.json"
       }
     },
@@ -19,11 +19,11 @@
         "PreToolUse": ["1password-validate-mounted-env-files"]
       },
       "user": {
-        "install_dir": ".config/github-copilot/agent-hooks",
+        "install_dir": ".config/github-copilot/1password-hooks",
         "config_path": ".config/github-copilot/hooks.json"
       },
       "project": {
-        "install_dir": ".github/agent-hooks",
+        "install_dir": ".github/1password-hooks",
         "config_path": ".github/hooks.json"
       }
     }
