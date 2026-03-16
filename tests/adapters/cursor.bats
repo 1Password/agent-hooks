@@ -9,24 +9,6 @@ setup() {
 
 CURSOR_PAYLOAD='{"command": "npm run build", "workspace_roots": ["/Users/alice/project"], "cwd": "/Users/alice/project"}'
 
-# ========== client_detect ==========
-
-@test "client_detect returns yes for Cursor payload" {
-    run client_detect "$CURSOR_PAYLOAD"
-    [[ "$output" == "yes" ]]
-}
-
-@test "client_detect returns no for Copilot payload" {
-    local payload='{"hook_event_name": "PreToolUse", "tool_name": "run_in_terminal", "cwd": "/tmp"}'
-    run client_detect "$payload"
-    [[ "$output" == "no" ]]
-}
-
-@test "client_detect returns no for empty payload" {
-    run client_detect "{}"
-    [[ "$output" == "no" ]]
-}
-
 # ========== normalize_input ==========
 
 @test "normalize_input produces canonical JSON with correct client field" {

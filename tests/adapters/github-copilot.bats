@@ -4,40 +4,11 @@ load "../test_helper"
 
 setup() {
     unset _ADAPTER_COPILOT_LOADED _ADAPTERS_LIB_LOADED _LIB_JSON_LOADED _LIB_LOGGING_LOADED
-    unset CLAUDE_PROJECT_DIR
+    unset CLAUDE_PROJECT_DIR CURSOR_VERSION
     source "${PROJECT_ROOT}/adapters/github-copilot.sh"
 }
 
-COPILOT_PAYLOAD='{"hook_event_name": "PreToolUse", "tool_name": "run_in_terminal", "cwd": "/Users/bob/project", "command": "make test"}'
-
-# ========== client_detect ==========
-
-@test "client_detect returns yes for Copilot payload" {
-    run client_detect "$COPILOT_PAYLOAD"
-    [[ "$output" == "yes" ]]
-}
-
-@test "client_detect returns no when CLAUDE_PROJECT_DIR is set" {
-    CLAUDE_PROJECT_DIR="/tmp" run client_detect "$COPILOT_PAYLOAD"
-    [[ "$output" == "no" ]]
-}
-
-@test "client_detect returns no for Cursor payload" {
-    local payload='{"command": "ls", "workspace_roots": ["/tmp"], "cwd": "/tmp"}'
-    run client_detect "$payload"
-    [[ "$output" == "no" ]]
-}
-
-@test "client_detect returns no for empty payload" {
-    run client_detect "{}"
-    [[ "$output" == "no" ]]
-}
-
-@test "client_detect returns no when only hook_event_name present" {
-    local payload='{"hook_event_name": "PreToolUse"}'
-    run client_detect "$payload"
-    [[ "$output" == "no" ]]
-}
+COPILOT_PAYLOAD='{"hookEventName": "PreToolUse", "tool_name": "run_in_terminal", "cwd": "/Users/bob/project", "command": "make test"}'
 
 # ========== normalize_input ==========
 

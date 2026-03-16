@@ -1,16 +1,65 @@
 # Shared adapter utilities for agent-hooks.
 # Source this file; it defines functions only and has no side effects.
 #
-# Each adapter must implement three functions:
-#   ide_detect "$raw_payload"       — print "yes" or "no"
+# Each adapter must implement two functions:
 #   normalize_input "$raw_payload"  — print canonical JSON to stdout
 #   emit_output "$canonical_output" — print IDE-native response, set exit code
+#
+# Client detection is centralized in detect_client() below.
 
 [[ -n "${_ADAPTERS_LIB_LOADED:-}" ]] && return 0
 _ADAPTERS_LIB_LOADED=1
 
 _ADAPTERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_ADAPTERS_DIR}/../lib/json.sh"
+
+# Detect which agentic client invoked the hook.
+# Uses env vars and payload fields in most-specific-first order to avoid
+# ambiguity (e.g. Cursor sets CLAUDE_PROJECT_DIR as a compatibility alias).
+#
+# Signals per client (from official docs):
+#   Cursor:         CURSOR_VERSION env var; `cursor_version` payload field
+#   Windsurf:       `agent_action_name` payload field (unique)
+#   Claude Code:    CLAUDE_PROJECT_DIR env var (after ruling out Cursor);
+#                   `permission_mode` payload field (unique)
+#   GitHub Copilot: `hookEventName` payload field (camelCase key, distinct
+#                   from Cursor's snake_case `hook_event_name`)
+#
+# Usage: detected=$(detect_client "$raw_payload")
+detect_client() {
+    local raw_payload="$1"
+
+    # 1. Cursor — CURSOR_VERSION is always set by Cursor and never by others.
+    #    cursor_version is present in every Cursor hook payload.
+    if [[ -n "${CURSOR_VERSION:-}" ]] || json_has_key "$raw_payload" "cursor_version"; then
+        echo "cursor"
+        return 0
+    fi
+
+    # 2. Windsurf — agent_action_name is unique to Windsurf payloads.
+    if json_has_key "$raw_payload" "agent_action_name"; then
+        echo "windsurf"
+        return 0
+    fi
+
+    # 3. Claude Code — CLAUDE_PROJECT_DIR is set by Claude Code (Cursor also
+    #    sets it, but was already caught above). permission_mode is unique to
+    #    Claude Code payloads.
+    if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]] || json_has_key "$raw_payload" "permission_mode"; then
+        echo "claude"
+        return 0
+    fi
+
+    # 4. GitHub Copilot (VS Code) — uses camelCase hookEventName (not
+    #    snake_case hook_event_name like Cursor/Claude Code).
+    if json_has_key "$raw_payload" "hookEventName"; then
+        echo "github-copilot"
+        return 0
+    fi
+
+    echo "unknown"
+    return 0
+}
 
 # Build canonical JSON from extracted fields.
 # Embeds raw_payload as a nested JSON object.

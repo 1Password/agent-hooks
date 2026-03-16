@@ -1,7 +1,8 @@
 # GitHub Copilot (VS Code) adapter.
 #
-# Copilot input payload:
-#   {"hook_event_name": "PreToolUse", "tool_name": "run_in_terminal", "cwd": "..."}
+# Copilot input payload (PreToolUse):
+#   {"hookEventName": "PreToolUse", "tool_name": "run_in_terminal",
+#    "cwd": "...", "sessionId": "...", "timestamp": "..."}
 #
 # Copilot output:
 #   Allow: {"continue": true}                              exit 0
@@ -14,24 +15,6 @@ _ADAPTER_COPILOT_LOADED=1
 
 _ADAPTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_ADAPTER_DIR}/_lib.sh"
-
-client_detect() {
-    local raw_payload="$1"
-    # Copilot sends hook_event_name + tool_name, but so does Claude Code.
-    # Claude Code is distinguished by the CLAUDE_PROJECT_DIR env var,
-    # so Copilot is: has both fields AND no CLAUDE_PROJECT_DIR.
-    if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
-        echo "no"
-        return 0
-    fi
-
-    if json_has_key "$raw_payload" "hook_event_name" && \
-       json_has_key "$raw_payload" "tool_name"; then
-        echo "yes"
-    else
-        echo "no"
-    fi
-}
 
 normalize_input() {
     local raw_payload="$1"
