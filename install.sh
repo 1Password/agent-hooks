@@ -191,6 +191,11 @@ if is_unsafe_relative_path "$INSTALL_DIR_REL" || is_unsafe_relative_path "$CONFI
   exit 1
 fi
 
+if [[ "$INSTALL_DIR_REL" == *$'\n'* || "$CONFIG_PATH_REL" == *$'\n'* ]]; then
+  echo "Error: install_dir or config_path may not contain newlines." >&2
+  exit 1
+fi
+
 # Resolve base directory
 if [[ -n "${TARGET_DIR:-}" ]]; then
   if [[ ! -d "$TARGET_DIR" ]]; then
@@ -237,7 +242,7 @@ done
 while IFS= read -r adapter; do
   [[ -z "$adapter" ]] && continue
   if is_unsafe_segment "$adapter"; then
-    echo "Error: invalid adapter name (path traversal): $adapter" >&2
+    echo "Error: invalid adapter name (path traversal). skipping." >&2
     exit 1
   fi
   src="${REPO_ROOT}/adapters/${adapter}"
@@ -252,7 +257,7 @@ done < <(get_string_array "$AGENT_BLOCK" "adapters")
 while IFS=$'\t' read -r event hook_name; do
   [[ -z "$hook_name" ]] && continue
   if is_unsafe_segment "$hook_name"; then
-    echo "Error: invalid hook name (path traversal): $hook_name" >&2
+    echo "Error: invalid hook name (path traversal). skipping." >&2
     exit 1
   fi
   hook_dir="${REPO_ROOT}/hooks/${hook_name}"
