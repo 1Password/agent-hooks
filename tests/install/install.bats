@@ -22,22 +22,10 @@ T="$BATS_TEST_TMPDIR"
   [[ "$output" == *"invalid"* ]]
 }
 
-@test "install.sh invalid --scope exits non-zero" {
-  run bash "${INSTALL_SCRIPT}" --agent cursor --scope invalid --target-dir "${T}"
+@test "install.sh unknown option exits non-zero" {
+  run bash "${INSTALL_SCRIPT}" --agent cursor --scope project
   [[ $status -ne 0 ]]
-  [[ "$output" == *"must be 'user', 'project', or 'global'"* ]]
-}
-
-@test "install.sh --scope global without root exits non-zero" {
-  run bash "${INSTALL_SCRIPT}" --agent cursor --scope global
-  [[ $status -ne 0 ]]
-  [[ "$output" == *"requires root"* ]]
-}
-
-@test "install.sh --scope global with --target-dir exits non-zero" {
-  run bash "${INSTALL_SCRIPT}" --agent cursor --scope global --target-dir "${T}"
-  [[ $status -ne 0 ]]
-  [[ "$output" == *"not allowed with --scope global"* ]]
+  [[ "$output" == *"Unknown option"* ]]
 }
 
 @test "install.sh nonexistent --target-dir exits non-zero" {
@@ -46,39 +34,33 @@ T="$BATS_TEST_TMPDIR"
   [[ "$output" == *"does not exist"* ]]
 }
 
+@test "install.sh without --target-dir creates bundle in cwd and does not create hooks.json" {
+  run bash -c "cd '${T}' && bash '${INSTALL_SCRIPT}' --agent cursor"
+  [[ $status -eq 0 ]]
+  [[ -f "${T}/cursor-1password-hooks-bundle/bin/run-hook.sh" ]]
+  [[ -f "${T}/cursor-1password-hooks-bundle/adapters/cursor.sh" ]]
+  [[ -f "${T}/cursor-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
+  [[ "$output" == *"Bundle created at:"* ]]
+  [[ "$output" == *"Add hooks.json"* ]]
+  [[ ! -f "${T}/cursor-1password-hooks-bundle/hooks.json" ]]
+  [[ ! -f "${T}/.cursor/hooks.json" ]]
+}
+
 # ---- Cursor: install paths ----
 
-@test "cursor: --target-dir creates .cursor/1password-hooks and expected files" {
+@test "cursor: --target-dir creates .cursor/cursor-1password-hooks-bundle and expected files" {
   run bash "${INSTALL_SCRIPT}" --agent cursor --target-dir "${T}"
   [[ $status -eq 0 ]]
-  [[ -f "${T}/.cursor/1password-hooks/bin/run-hook.sh" ]]
-  [[ -d "${T}/.cursor/1password-hooks/lib" ]]
-  [[ -n "$(echo "${T}"/.cursor/1password-hooks/lib/*.sh)" ]]
-  [[ -f "${T}/.cursor/1password-hooks/adapters/_lib.sh" ]]
-  [[ -f "${T}/.cursor/1password-hooks/adapters/cursor.sh" ]]
-  [[ -f "${T}/.cursor/1password-hooks/adapters/generic.sh" ]]
-  [[ -f "${T}/.cursor/1password-hooks/hooks/1password-validate-mounted-env-files/hook.sh" ]]
+  [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/bin/run-hook.sh" ]]
+  [[ -d "${T}/.cursor/cursor-1password-hooks-bundle/lib" ]]
+  [[ -n "$(echo "${T}"/.cursor/cursor-1password-hooks-bundle/lib/*.sh)" ]]
+  [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/adapters/_lib.sh" ]]
+  [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/adapters/cursor.sh" ]]
+  [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/adapters/generic.sh" ]]
+  [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
   [[ -f "${T}/.cursor/hooks.json" ]]
   [[ "$output" == *"Config path:"* ]]
   [[ "$output" == *"Done. Hook(s) installed"* ]]
-}
-
-@test "cursor: --scope project (cwd) creates .cursor/1password-hooks" {
-  run bash -c "cd '${T}' && bash '${INSTALL_SCRIPT}' --agent cursor --scope project"
-  [[ $status -eq 0 ]]
-  [[ -f "${T}/.cursor/1password-hooks/bin/run-hook.sh" ]]
-  [[ -f "${T}/.cursor/1password-hooks/adapters/cursor.sh" ]]
-  [[ -f "${T}/.cursor/1password-hooks/hooks/1password-validate-mounted-env-files/hook.sh" ]]
-  [[ -f "${T}/.cursor/hooks.json" ]]
-}
-
-@test "cursor: --scope user (HOME) creates .cursor/1password-hooks under HOME" {
-  run env HOME="${T}" bash "${INSTALL_SCRIPT}" --agent cursor --scope user
-  [[ $status -eq 0 ]]
-  [[ -f "${T}/.cursor/1password-hooks/bin/run-hook.sh" ]]
-  [[ -f "${T}/.cursor/1password-hooks/adapters/cursor.sh" ]]
-  [[ -f "${T}/.cursor/1password-hooks/hooks/1password-validate-mounted-env-files/hook.sh" ]]
-  [[ -f "${T}/.cursor/hooks.json" ]]
 }
 
 @test "cursor: does not overwrite existing hooks.json" {
@@ -111,50 +93,32 @@ T="$BATS_TEST_TMPDIR"
       "beforeShellExecution": ["hook-a", "hook-b"]
     },
     "project": {
-      "install_dir": ".cursor/1password-hooks",
+      "install_dir": ".cursor/cursor-1password-hooks-bundle",
       "config_path": ".cursor/hooks.json"
     }
   }
 }
 EOF
-  run bash "${repo}/install.sh" --agent cursor --scope project --target-dir "${T}"
+  run bash "${repo}/install.sh" --agent cursor --target-dir "${T}"
   [[ $status -eq 0 ]]
-  [[ -f "${T}/.cursor/1password-hooks/hooks/hook-a/hook.sh" ]]
-  [[ -f "${T}/.cursor/1password-hooks/hooks/hook-b/hook.sh" ]]
+  [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/hooks/hook-a/hook.sh" ]]
+  [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/hooks/hook-b/hook.sh" ]]
 }
 
 # ---- GitHub Copilot: install paths ----
 
-@test "github-copilot: --target-dir creates .github/1password-hooks and expected files" {
+@test "github-copilot: --target-dir creates .github/github-copilot-1password-hooks-bundle and expected files" {
   run bash "${INSTALL_SCRIPT}" --agent github-copilot --target-dir "${T}"
   [[ $status -eq 0 ]]
-  [[ -f "${T}/.github/1password-hooks/bin/run-hook.sh" ]]
-  [[ -d "${T}/.github/1password-hooks/lib" ]]
-  [[ -f "${T}/.github/1password-hooks/adapters/_lib.sh" ]]
-  [[ -f "${T}/.github/1password-hooks/adapters/generic.sh" ]]
-  [[ -f "${T}/.github/1password-hooks/adapters/github-copilot.sh" ]]
-  [[ ! -f "${T}/.github/1password-hooks/adapters/cursor.sh" ]]
-  [[ -f "${T}/.github/1password-hooks/hooks/1password-validate-mounted-env-files/hook.sh" ]]
+  [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/bin/run-hook.sh" ]]
+  [[ -d "${T}/.github/github-copilot-1password-hooks-bundle/lib" ]]
+  [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/adapters/_lib.sh" ]]
+  [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/adapters/generic.sh" ]]
+  [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/adapters/github-copilot.sh" ]]
+  [[ ! -f "${T}/.github/github-copilot-1password-hooks-bundle/adapters/cursor.sh" ]]
+  [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
   [[ -f "${T}/.github/hooks.json" ]]
   [[ "$output" == *"Done. Hook(s) installed"* ]]
-}
-
-@test "github-copilot: --scope project (cwd) creates .github/1password-hooks" {
-  run bash -c "cd '${T}' && bash '${INSTALL_SCRIPT}' --agent github-copilot --scope project"
-  [[ $status -eq 0 ]]
-  [[ -f "${T}/.github/1password-hooks/bin/run-hook.sh" ]]
-  [[ -f "${T}/.github/1password-hooks/adapters/github-copilot.sh" ]]
-  [[ -f "${T}/.github/1password-hooks/hooks/1password-validate-mounted-env-files/hook.sh" ]]
-  [[ -f "${T}/.github/hooks.json" ]]
-}
-
-@test "github-copilot: --scope user (HOME) creates .config/github-copilot/1password-hooks" {
-  run env HOME="${T}" bash "${INSTALL_SCRIPT}" --agent github-copilot --scope user
-  [[ $status -eq 0 ]]
-  [[ -f "${T}/.config/github-copilot/1password-hooks/bin/run-hook.sh" ]]
-  [[ -f "${T}/.config/github-copilot/1password-hooks/adapters/github-copilot.sh" ]]
-  [[ -f "${T}/.config/github-copilot/1password-hooks/hooks/1password-validate-mounted-env-files/hook.sh" ]]
-  [[ ! -f "${T}/.config/github-copilot/hooks.json" ]]
 }
 
 @test "github-copilot: does not overwrite existing hooks.json" {
@@ -171,13 +135,13 @@ EOF
 @test "cursor: installed run-hook.sh runs (smoke)" {
   run bash "${INSTALL_SCRIPT}" --agent cursor --target-dir "${T}"
   [[ $status -eq 0 ]]
-  run bash -c "echo '{}' | ${T}/.cursor/1password-hooks/bin/run-hook.sh 1password-validate-mounted-env-files"
+  run bash -c "echo '{}' | ${T}/.cursor/cursor-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
   [[ $status -eq 0 ]]
 }
 
 @test "github-copilot: installed run-hook.sh runs (smoke)" {
   run bash "${INSTALL_SCRIPT}" --agent github-copilot --target-dir "${T}"
   [[ $status -eq 0 ]]
-  run bash -c "echo '{}' | ${T}/.github/1password-hooks/bin/run-hook.sh 1password-validate-mounted-env-files"
+  run bash -c "echo '{}' | ${T}/.github/github-copilot-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
   [[ $status -eq 0 ]]
 }

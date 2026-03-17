@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
 # Install agent hooks for Cursor or GitHub Copilot.
-# Copies files only; does not create or modify hooks.json (you add entries yourself).
-# Run from this repo; can install into this repo (project/user) or into --target-dir.
+# Always creates a bundle (hook files). With --target-dir, installs that bundle into DIR and creates hooks.json from template if missing (never overwrites existing hooks.json).
+# Run from this repo.
 #
-# Usage: ./install.sh [--agent cursor|github-copilot] [--scope user|project|global] [--target-dir DIR]
+# Usage: ./install.sh --agent cursor|github-copilot [--target-dir DIR]
 #
 set -euo pipefail
 
@@ -17,11 +17,10 @@ fi
 CONFIG_PATH="${REPO_ROOT}/${CONFIG_NAME}"
 
 usage() {
-  echo "Usage: $0 --agent cursor|github-copilot [--scope user|project|global] [--target-dir DIR]"
+  echo "Usage: $0 --agent cursor|github-copilot [--target-dir DIR]"
   echo ""
-  echo "  --agent      (required) Agent to install (example: cursor, github-copilot)"
-  echo "  --scope      user = user paths (e.g. under \$HOME). project = project paths (default; use with --target-dir to install into another repo). global = system-wide (requires root)."
-  echo "  --target-dir Install into DIR (not allowed with --scope global)"
+  echo "  --agent      (required) Agent (cursor or github-copilot)."
+  echo "  --target-dir If set: install bundle into DIR (creates hooks.json from template if missing). If unset: create bundle in current directory only (no hooks.json)."
   echo ""
   exit 1
 }
@@ -121,10 +120,8 @@ is_unsafe_segment() {
 
 # ---- Main ----
 AGENT=""
-SCOPE="project"
 TARGET_DIR=""
 
-# Require a non-option value for the last option; call from case branch before using $2.
 require_value() {
   local opt="$1"
   if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
@@ -133,17 +130,11 @@ require_value() {
   fi
 }
 
-
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --agent)
       require_value "--agent" "${2:-}"
       AGENT="$2"
-      shift 2
-      ;;
-    --scope)
-      require_value "--scope" "${2:-}"
-      SCOPE="$2"
       shift 2
       ;;
     --target-dir)
@@ -161,23 +152,6 @@ if [[ -z "$AGENT" ]]; then
   usage
 fi
 
-if [[ "$SCOPE" != "user" && "$SCOPE" != "project" && "$SCOPE" != "global" ]]; then
-  echo "Error: --scope must be 'user', 'project', or 'global'"
-  exit 1
-fi
-
-if [[ "$SCOPE" == "global" && -n "${TARGET_DIR:-}" ]]; then
-  echo "Error: --target-dir is not allowed with --scope global" >&2
-  exit 1
-fi
-
-if [[ "$SCOPE" == "global" ]]; then
-  if [[ $(id -u) -ne 0 ]]; then
-    echo "Error: --scope global requires root (e.g. run with sudo)" >&2
-    exit 1
-  fi
-fi
-
 if [[ ! -f "$CONFIG_PATH" ]]; then
   echo "Error: config not found: $CONFIG_PATH"
   exit 1
@@ -190,16 +164,16 @@ if [[ -z "$AGENT_BLOCK" ]]; then
   exit 1
 fi
 
-SCOPE_BLOCK=$(get_json_block "$AGENT_BLOCK" "$SCOPE") || true
+SCOPE_BLOCK=$(get_json_block "$AGENT_BLOCK" "project") || true
 if [[ -z "$SCOPE_BLOCK" ]]; then
-  echo "Error: could not find scope block for: $SCOPE"
+  echo "Error: could not find project block for: $AGENT"
   exit 1
 fi
 
 INSTALL_DIR_REL=$(get_string_key "$SCOPE_BLOCK" "install_dir") || true
 CONFIG_PATH_REL=$(get_string_key "$SCOPE_BLOCK" "config_path") || true
 if [[ -z "$INSTALL_DIR_REL" || -z "$CONFIG_PATH_REL" ]]; then
-  echo "Error: missing install_dir or config_path for agent=$AGENT scope=$SCOPE"
+  echo "Error: missing install_dir or config_path for agent=$AGENT"
   exit 1
 fi
 
@@ -213,41 +187,30 @@ if [[ "$INSTALL_DIR_REL" == *$'\n'* || "$CONFIG_PATH_REL" == *$'\n'* ]]; then
   exit 1
 fi
 
-if [[ "$SCOPE" == "global" ]]; then
-  if [[ "${INSTALL_DIR_REL:0:1}" != "/" || "${CONFIG_PATH_REL:0:1}" != "/" ]]; then
-    echo "Error: for --scope global, install_dir and config_path must be absolute paths." >&2
+# Resolve install directory (and config path only when --target-dir is set)
+BUNDLE_NAME="${INSTALL_DIR_REL##*/}"
+if [[ -n "${TARGET_DIR:-}" ]]; then
+  if [[ ! -d "$TARGET_DIR" ]]; then
+    echo "Error: target directory does not exist: $TARGET_DIR"
     exit 1
   fi
-fi
-
-# Resolve base directory (not used for global scope)
-if [[ "$SCOPE" == "global" ]]; then
-  INSTALL_DIR="$INSTALL_DIR_REL"
-  CONFIG_FILE="$CONFIG_PATH_REL"
-else
-  if [[ -n "${TARGET_DIR:-}" ]]; then
-    if [[ ! -d "$TARGET_DIR" ]]; then
-      echo "Error: target directory does not exist: $TARGET_DIR"
-      exit 1
-    fi
-    BASE="$(cd "$TARGET_DIR" && pwd)"
-    echo "Target directory: $BASE"
-  else
-    if [[ "$SCOPE" == "user" ]]; then
-      BASE="${HOME}"
-    else
-      BASE="$(pwd)"
-    fi
-  fi
+  BASE="$(cd "$TARGET_DIR" && pwd)"
   INSTALL_DIR="${BASE}/${INSTALL_DIR_REL}"
   CONFIG_FILE="${BASE}/${CONFIG_PATH_REL}"
+  echo "Target directory: $BASE"
+else
+  INSTALL_DIR="$(pwd)/${BUNDLE_NAME}"
+  CONFIG_FILE=""
 fi
 
-echo "Agent: $AGENT | Scope: $SCOPE"
+echo "Agent: $AGENT"
 echo "Install dir:  $INSTALL_DIR"
-echo "Config path: $CONFIG_FILE (created if missing)"
+if [[ -n "$CONFIG_FILE" ]]; then
+  echo "Config path: $CONFIG_FILE (created if missing)"
+fi
 echo ""
 
+# Overwrite prompt: same for bundle-in-cwd or install-into-target (never overwrite existing hooks.json)
 if [[ -d "$INSTALL_DIR" ]] && [[ -t 0 ]]; then
   echo "1Password agent hooks already installed at: $INSTALL_DIR"
   echo "This will overwrite with a fresh install. Any changes you made may be lost."
@@ -297,46 +260,35 @@ while IFS=$'\t' read -r event hook_name; do
   fi
 done < <(get_hook_events "$AGENT_BLOCK")
 
-# Create hooks config only if it doesn't exist
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  mkdir -p "$(dirname "$CONFIG_FILE")"
-  if [[ "$SCOPE" == "global" ]]; then
-    template_rel=$(get_string_key "$SCOPE_BLOCK" "config_template") || true
-    if [[ -z "$template_rel" ]]; then
-      PROJECT_BLOCK=$(get_json_block "$AGENT_BLOCK" "project") || true
-      template_rel=$(get_string_key "$PROJECT_BLOCK" "config_path") || true
-    fi
-    template="${REPO_ROOT}/${template_rel}"
-  else
+# Create hooks.json only when --target-dir was set: from template if missing; never overwrite existing
+if [[ -n "$CONFIG_FILE" ]]; then
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    mkdir -p "$(dirname "$CONFIG_FILE")"
     template="${REPO_ROOT}/${CONFIG_PATH_REL}"
-  fi
-  if [[ -f "$template" ]]; then
-    cp "$template" "$CONFIG_FILE"
-    # Fix command path: project = from repo root; user = from config dir; global = absolute path
-    if [[ "$SCOPE" == "project" ]]; then
+    if [[ -f "$template" ]]; then
+      cp "$template" "$CONFIG_FILE"
       SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
-    elif [[ "$SCOPE" == "global" ]]; then
-      SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
-    else
-      CONFIG_DIR_REL="$(dirname "$CONFIG_PATH_REL")"
-      SCRIPT_PATH_REL="${INSTALL_DIR_REL#${CONFIG_DIR_REL}/}/bin/run-hook.sh"
-    fi
-      # Escape for sed replacement: \ and & are special
       SCRIPT_PATH_REL_SED="${SCRIPT_PATH_REL//\\/\\\\}"
       SCRIPT_PATH_REL_SED="${SCRIPT_PATH_REL_SED//&/\\&}"
-    if sed --version 2>/dev/null | grep -q GNU; then
-      sed -i "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE"
+      if sed --version 2>/dev/null | grep -q GNU; then
+        sed -i "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE"
+      else
+        sed -i.bak "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE" && rm -f "${CONFIG_FILE}.bak"
+      fi
+      echo "Created $CONFIG_FILE with default hook entries."
     else
-      sed -i.bak "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE" && rm -f "${CONFIG_FILE}.bak"
+      echo "Warning: no template at $template; skipping config creation."
     fi
-    echo "Created $CONFIG_FILE with default hook entries."
   else
-    echo "Warning: no template at $template; skipping config creation."
+    echo "" >&2
+    echo "WARNING: Config already exists at $CONFIG_FILE; update it to add or change hook entries." >&2
+    echo "" >&2
   fi
-else
-  echo "" >&2
-  echo "WARNING: Config already exists at $CONFIG_FILE; update it to add or change hook entries." >&2
-  echo "" >&2
 fi
 
-echo "Done. Hook(s) installed"
+if [[ -n "$CONFIG_FILE" ]]; then
+  echo "Done. Hook(s) installed"
+else
+  echo "Bundle created at: $INSTALL_DIR"
+  echo "Add hooks.json at your config path and set command to: ${INSTALL_DIR}/bin/run-hook.sh <hook-name>"
+fi

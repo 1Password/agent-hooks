@@ -4,18 +4,9 @@
       "hook_events": {
         "beforeShellExecution": ["1password-validate-mounted-env-files"]
       },
-      "user": {
-        "install_dir": ".cursor/1password-hooks",
-        "config_path": ".cursor/hooks.json"
-      },
       "project": {
-        "install_dir": ".cursor/1password-hooks",
+        "install_dir": ".cursor/cursor-1password-hooks-bundle",
         "config_path": ".cursor/hooks.json"
-      },
-      "global": {
-        "install_dir": "/usr/local/share/cursor/1password-hooks",
-        "config_path": "/etc/cursor/hooks.json",
-        "config_template": ".cursor/hooks.json"
       }
     },
     "github-copilot": {
@@ -23,18 +14,9 @@
       "hook_events": {
         "PreToolUse": ["1password-validate-mounted-env-files"]
       },
-      "user": {
-        "install_dir": ".config/github-copilot/1password-hooks",
-        "config_path": ".config/github-copilot/hooks.json"
-      },
       "project": {
-        "install_dir": ".github/1password-hooks",
+        "install_dir": ".github/github-copilot-1password-hooks-bundle",
         "config_path": ".github/hooks.json"
-      },
-      "global": {
-        "install_dir": "/usr/local/share/github-copilot/1password-hooks",
-        "config_path": "/etc/github-copilot/hooks.json",
-        "config_template": ".github/hooks.json"
       }
     }
   }
