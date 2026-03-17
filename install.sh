@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 #
 # Install agent hooks for Cursor or GitHub Copilot.
-# Copies hook files into the install dir (from install-client-config.json). Creates hooks.json from template if missing; does not overwrite an existing hooks.json.
-# Run from this repo; installs into current directory or --target-dir (project scope only). Use --bundle for a portable copy.
+# Always creates a bundle (hook files). With --target-dir, installs that bundle into DIR and creates hooks.json from template if missing (never overwrites existing hooks.json).
+# Run from this repo.
 #
-# Usage: ./install.sh [--agent cursor|github-copilot] [--scope project] [--target-dir DIR]
-#        ./install.sh [--agent cursor|github-copilot] --bundle
+# Usage: ./install.sh --agent cursor|github-copilot [--target-dir DIR]
 #
 set -euo pipefail
 
@@ -18,13 +17,10 @@ fi
 CONFIG_PATH="${REPO_ROOT}/${CONFIG_NAME}"
 
 usage() {
-  echo "Usage: $0 --agent cursor|github-copilot [--scope project] [--target-dir DIR]"
-  echo "       $0 --agent cursor|github-copilot --bundle"
+  echo "Usage: $0 --agent cursor|github-copilot [--target-dir DIR]"
   echo ""
-  echo "  --agent      (required) Agent to install (example: cursor, github-copilot)"
-  echo "  --scope      project = project paths (default; use with --target-dir to install into another repo)."
-  echo "  --target-dir Install into DIR (project scope)."
-  echo "  --bundle     Create a portable directory with hook files only (no hooks.json) in the current directory as <agent>-1password-hooks-bundle. Move it where you like and add hooks.json yourself. Mutually exclusive with --scope and --target-dir."
+  echo "  --agent      (required) Agent (cursor or github-copilot)."
+  echo "  --target-dir If set: install bundle into DIR (creates hooks.json from template if missing). If unset: create bundle in current directory only (no hooks.json)."
   echo ""
   exit 1
 }
@@ -124,12 +120,8 @@ is_unsafe_segment() {
 
 # ---- Main ----
 AGENT=""
-SCOPE="project"
-SCOPE_EXPLICIT=0
 TARGET_DIR=""
-BUNDLE_DIR=""
 
-# Require a non-option value for the last option; call from case branch before using $2.
 require_value() {
   local opt="$1"
   if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
@@ -138,7 +130,6 @@ require_value() {
   fi
 }
 
-
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --agent)
@@ -146,20 +137,10 @@ while [[ $# -gt 0 ]]; do
       AGENT="$2"
       shift 2
       ;;
-    --scope)
-      require_value "--scope" "${2:-}"
-      SCOPE="$2"
-      SCOPE_EXPLICIT=1
-      shift 2
-      ;;
     --target-dir)
       require_value "--target-dir" "${2:-}"
       TARGET_DIR="$2"
       shift 2
-      ;;
-    --bundle)
-      BUNDLE_DIR="."
-      shift 1
       ;;
     -h|--help) usage ;;
     *) echo "Unknown option: $1" >&2; usage ;;
@@ -169,20 +150,6 @@ done
 if [[ -z "$AGENT" ]]; then
   echo "Error: --agent is required (cursor or github-copilot)" >&2
   usage
-fi
-
-if [[ -n "$BUNDLE_DIR" ]]; then
-  if [[ "$SCOPE_EXPLICIT" -ne 0 ]] || [[ -n "${TARGET_DIR:-}" ]]; then
-    echo "Error: --bundle is mutually exclusive with --scope and --target-dir." >&2
-    exit 1
-  fi
-  BUNDLE_DIR="$(pwd)/${AGENT}-1password-hooks-bundle"
-  SCOPE="bundle"
-fi
-
-if [[ "$SCOPE" != "bundle" && "$SCOPE" != "project" ]]; then
-  echo "Error: --scope must be 'project'"
-  exit 1
 fi
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
@@ -197,20 +164,16 @@ if [[ -z "$AGENT_BLOCK" ]]; then
   exit 1
 fi
 
-if [[ "$SCOPE" == "bundle" ]]; then
-  SCOPE_BLOCK=$(get_json_block "$AGENT_BLOCK" "project") || true
-else
-  SCOPE_BLOCK=$(get_json_block "$AGENT_BLOCK" "$SCOPE") || true
-fi
+SCOPE_BLOCK=$(get_json_block "$AGENT_BLOCK" "project") || true
 if [[ -z "$SCOPE_BLOCK" ]]; then
-  echo "Error: could not find scope block for: $SCOPE"
+  echo "Error: could not find project block for: $AGENT"
   exit 1
 fi
 
 INSTALL_DIR_REL=$(get_string_key "$SCOPE_BLOCK" "install_dir") || true
 CONFIG_PATH_REL=$(get_string_key "$SCOPE_BLOCK" "config_path") || true
 if [[ -z "$INSTALL_DIR_REL" || -z "$CONFIG_PATH_REL" ]]; then
-  echo "Error: missing install_dir or config_path for agent=$AGENT scope=$SCOPE"
+  echo "Error: missing install_dir or config_path for agent=$AGENT"
   exit 1
 fi
 
@@ -224,32 +187,30 @@ if [[ "$INSTALL_DIR_REL" == *$'\n'* || "$CONFIG_PATH_REL" == *$'\n'* ]]; then
   exit 1
 fi
 
-# Resolve install directory (and config path for non-bundle)
-if [[ "$SCOPE" == "bundle" ]]; then
-  INSTALL_DIR="${BUNDLE_DIR}"
-  CONFIG_FILE=""
-else
-  if [[ -n "${TARGET_DIR:-}" ]]; then
-    if [[ ! -d "$TARGET_DIR" ]]; then
-      echo "Error: target directory does not exist: $TARGET_DIR"
-      exit 1
-    fi
-    BASE="$(cd "$TARGET_DIR" && pwd)"
-    echo "Target directory: $BASE"
-  else
-    BASE="$(pwd)"
+# Resolve install directory (and config path only when --target-dir is set)
+BUNDLE_NAME="${INSTALL_DIR_REL##*/}"
+if [[ -n "${TARGET_DIR:-}" ]]; then
+  if [[ ! -d "$TARGET_DIR" ]]; then
+    echo "Error: target directory does not exist: $TARGET_DIR"
+    exit 1
   fi
+  BASE="$(cd "$TARGET_DIR" && pwd)"
   INSTALL_DIR="${BASE}/${INSTALL_DIR_REL}"
   CONFIG_FILE="${BASE}/${CONFIG_PATH_REL}"
+  echo "Target directory: $BASE"
+else
+  INSTALL_DIR="$(pwd)/${BUNDLE_NAME}"
+  CONFIG_FILE=""
 fi
 
-echo "Agent: $AGENT | Scope: $SCOPE"
+echo "Agent: $AGENT"
 echo "Install dir:  $INSTALL_DIR"
 if [[ -n "$CONFIG_FILE" ]]; then
   echo "Config path: $CONFIG_FILE (created if missing)"
 fi
 echo ""
 
+# Overwrite prompt: same for bundle-in-cwd or install-into-target (never overwrite existing hooks.json)
 if [[ -d "$INSTALL_DIR" ]] && [[ -t 0 ]]; then
   echo "1Password agent hooks already installed at: $INSTALL_DIR"
   echo "This will overwrite with a fresh install. Any changes you made may be lost."
@@ -299,8 +260,8 @@ while IFS=$'\t' read -r event hook_name; do
   fi
 done < <(get_hook_events "$AGENT_BLOCK")
 
-# Create hooks config only if it doesn't exist (skip for --bundle; user creates hooks.json themselves)
-if [[ "$SCOPE" != "bundle" && -n "$CONFIG_FILE" ]]; then
+# Create hooks.json only when --target-dir was set: from template if missing; never overwrite existing
+if [[ -n "$CONFIG_FILE" ]]; then
   if [[ ! -f "$CONFIG_FILE" ]]; then
     mkdir -p "$(dirname "$CONFIG_FILE")"
     template="${REPO_ROOT}/${CONFIG_PATH_REL}"
@@ -325,9 +286,9 @@ if [[ "$SCOPE" != "bundle" && -n "$CONFIG_FILE" ]]; then
   fi
 fi
 
-if [[ "$SCOPE" == "bundle" ]]; then
-  echo "Bundle created at: $BUNDLE_DIR"
-  echo "Add hooks.json at your Cursor config path and set command to: ${INSTALL_DIR}/bin/run-hook.sh 1password-validate-mounted-env-files"
-else
+if [[ -n "$CONFIG_FILE" ]]; then
   echo "Done. Hook(s) installed"
+else
+  echo "Bundle created at: $INSTALL_DIR"
+  echo "Add hooks.json at your config path and set command to: ${INSTALL_DIR}/bin/run-hook.sh <hook-name>"
 fi

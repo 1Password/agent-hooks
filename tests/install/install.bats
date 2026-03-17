@@ -22,34 +22,10 @@ T="$BATS_TEST_TMPDIR"
   [[ "$output" == *"invalid"* ]]
 }
 
-@test "install.sh invalid --scope exits non-zero" {
-  run bash "${INSTALL_SCRIPT}" --agent cursor --scope invalid --target-dir "${T}"
+@test "install.sh unknown option exits non-zero" {
+  run bash "${INSTALL_SCRIPT}" --agent cursor --scope project
   [[ $status -ne 0 ]]
-  [[ "$output" == *"must be 'project'"* ]]
-}
-
-@test "install.sh --scope user exits non-zero (user scope removed)" {
-  run bash "${INSTALL_SCRIPT}" --agent cursor --scope user --target-dir "${T}"
-  [[ $status -ne 0 ]]
-  [[ "$output" == *"must be 'project'"* ]]
-}
-
-@test "install.sh --bundle with --scope exits non-zero" {
-  run bash "${INSTALL_SCRIPT}" --agent cursor --bundle --scope project
-  [[ $status -ne 0 ]]
-  [[ "$output" == *"mutually exclusive"* ]]
-}
-
-@test "install.sh --bundle with --target-dir exits non-zero" {
-  run bash "${INSTALL_SCRIPT}" --agent cursor --bundle --target-dir "${T}"
-  [[ $status -ne 0 ]]
-  [[ "$output" == *"mutually exclusive"* ]]
-}
-
-@test "install.sh --bundle with --scope project exits non-zero" {
-  run bash "${INSTALL_SCRIPT}" --agent cursor --bundle --scope project
-  [[ $status -ne 0 ]]
-  [[ "$output" == *"mutually exclusive"* ]]
+  [[ "$output" == *"Unknown option"* ]]
 }
 
 @test "install.sh nonexistent --target-dir exits non-zero" {
@@ -58,8 +34,8 @@ T="$BATS_TEST_TMPDIR"
   [[ "$output" == *"does not exist"* ]]
 }
 
-@test "install.sh --bundle creates hook files and does not create hooks.json" {
-  run bash -c "cd '${T}' && bash '${INSTALL_SCRIPT}' --agent cursor --bundle"
+@test "install.sh without --target-dir creates bundle in cwd and does not create hooks.json" {
+  run bash -c "cd '${T}' && bash '${INSTALL_SCRIPT}' --agent cursor"
   [[ $status -eq 0 ]]
   [[ -f "${T}/cursor-1password-hooks-bundle/bin/run-hook.sh" ]]
   [[ -f "${T}/cursor-1password-hooks-bundle/adapters/cursor.sh" ]]
@@ -67,6 +43,7 @@ T="$BATS_TEST_TMPDIR"
   [[ "$output" == *"Bundle created at:"* ]]
   [[ "$output" == *"Add hooks.json"* ]]
   [[ ! -f "${T}/cursor-1password-hooks-bundle/hooks.json" ]]
+  [[ ! -f "${T}/.cursor/hooks.json" ]]
 }
 
 # ---- Cursor: install paths ----
@@ -84,15 +61,6 @@ T="$BATS_TEST_TMPDIR"
   [[ -f "${T}/.cursor/hooks.json" ]]
   [[ "$output" == *"Config path:"* ]]
   [[ "$output" == *"Done. Hook(s) installed"* ]]
-}
-
-@test "cursor: --scope project (cwd) creates .cursor/cursor-1password-hooks-bundle" {
-  run bash -c "cd '${T}' && bash '${INSTALL_SCRIPT}' --agent cursor --scope project"
-  [[ $status -eq 0 ]]
-  [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/bin/run-hook.sh" ]]
-  [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/adapters/cursor.sh" ]]
-  [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
-  [[ -f "${T}/.cursor/hooks.json" ]]
 }
 
 @test "cursor: does not overwrite existing hooks.json" {
@@ -131,7 +99,7 @@ T="$BATS_TEST_TMPDIR"
   }
 }
 EOF
-  run bash "${repo}/install.sh" --agent cursor --scope project --target-dir "${T}"
+  run bash "${repo}/install.sh" --agent cursor --target-dir "${T}"
   [[ $status -eq 0 ]]
   [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/hooks/hook-a/hook.sh" ]]
   [[ -f "${T}/.cursor/cursor-1password-hooks-bundle/hooks/hook-b/hook.sh" ]]
@@ -151,15 +119,6 @@ EOF
   [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
   [[ -f "${T}/.github/hooks.json" ]]
   [[ "$output" == *"Done. Hook(s) installed"* ]]
-}
-
-@test "github-copilot: --scope project (cwd) creates .github/github-copilot-1password-hooks-bundle" {
-  run bash -c "cd '${T}' && bash '${INSTALL_SCRIPT}' --agent github-copilot --scope project"
-  [[ $status -eq 0 ]]
-  [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/bin/run-hook.sh" ]]
-  [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/adapters/github-copilot.sh" ]]
-  [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
-  [[ -f "${T}/.github/hooks.json" ]]
 }
 
 @test "github-copilot: does not overwrite existing hooks.json" {
