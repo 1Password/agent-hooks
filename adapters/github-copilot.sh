@@ -24,7 +24,8 @@ normalize_input() {
     tool_name=$(extract_json_string "$raw_payload" "tool_name")
     command=$(extract_json_string "$raw_payload" "command")
 
-    # Copilot provides cwd as the single workspace root
+    # Copilot currently provides cwd as the single workspace root.
+    # TODO: If Copilot adds multi-root workspace support, parse roots from the payload instead.
     workspace_roots_json=$(paths_to_json_array "$cwd")
 
     build_canonical_input \

@@ -64,23 +64,34 @@ build_canonical_input() {
     local tool_name="$7"
     local raw_payload="$8"
 
+    local escaped_client escaped_event escaped_type
+    escaped_client=$(escape_json_string "$client")
+    escaped_event=$(escape_json_string "$event")
+    escaped_type=$(escape_json_string "$type")
+
     local escaped_cwd escaped_command escaped_tool_name
     escaped_cwd=$(escape_json_string "$cwd")
     escaped_command=$(escape_json_string "$command")
     escaped_tool_name=$(escape_json_string "$tool_name")
 
+    local trimmed_payload
+    trimmed_payload=$(printf '%s' "$raw_payload" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+    if [[ -z "$trimmed_payload" ]] || [[ "${trimmed_payload:0:1}" != "{" ]] || [[ "${trimmed_payload: -1}" != "}" ]]; then
+        trimmed_payload="{}"
+    fi
+
     # Multi-line output so that line-by-line JSON parsers (parse_json_workspace_roots)
     # can match top-level fields without colliding with keys inside raw_payload.
     cat <<CANONICAL_EOF
 {
-"client": "${client}",
-"event": "${event}",
-"type": "${type}",
+"client": "${escaped_client}",
+"event": "${escaped_event}",
+"type": "${escaped_type}",
 "workspace_roots": ${workspace_roots_json_array},
 "cwd": "${escaped_cwd}",
 "command": "${escaped_command}",
 "tool_name": "${escaped_tool_name}",
-"raw_payload": ${raw_payload}
+"raw_payload": ${trimmed_payload}
 }
 CANONICAL_EOF
 }

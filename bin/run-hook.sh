@@ -23,6 +23,11 @@ if [[ -z "$HOOK_NAME" ]]; then
     exit 0
 fi
 
+if [[ "$HOOK_NAME" == */* ]] || [[ "$HOOK_NAME" == *..* ]]; then
+    log "Error: invalid hook name '${HOOK_NAME}' — must not contain '/' or '..'"
+    exit 0
+fi
+
 HOOK_SCRIPT="${REPO_ROOT}/hooks/${HOOK_NAME}/hook.sh"
 if [[ ! -f "$HOOK_SCRIPT" ]]; then
     log "Error: hook script not found: ${HOOK_SCRIPT}"
