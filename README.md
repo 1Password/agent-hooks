@@ -31,59 +31,81 @@ User-level config lives under your home directory (e.g. `~/.cursor/` for Cursor,
 
 ## Installation
 
-This repo includes an install script that copies hook files (bin, lib, adapters, and hooks) into your project or user directory. Clone this repo and install from this repo’s root.
+This repo includes an install script that copies hook files (bin, lib, adapters, and hooks) into a bundle. Run it from this repo’s root. The script uses `--agent` to pick paths and config for each supported agent.
 
-### Install at project level
+- **`--agent`** (required) — The agent or IDE (e.g. `cursor`, `github-copilot`). See the table above.
+- **`--target-dir`** (optional) — If set, the script installs the bundle into that path and creates the agent's config file from a template when it doesn't already exist. If unset, the script only creates the bundle in the current directory and you move it and add config yourself.
 
-Install hooks for a single repo. Use `--target-dir` to point at the repo you want to install into.
+There are two ways to install:
 
-```bash
-./install.sh --agent cursor --scope project --target-dir /path/to/your/repo
-```
+### 1. Bundle
 
-- **`--agent`** — Your agent (e.g. `cursor`, `github-copilot`).
-- **`--target-dir`** — Path to the target repo (e.g. `~/Projects/my-app`).
-
-If the script says hooks are already installed, it will ask before overwriting so you don't lose any changes you made. Type `y` to continue or `n` to cancel.
-
-### Install at user level
-
-Install hooks under your home directory so they apply to all your projects.
+Create a portable bundle in the current directory (no config file). Move the folder wherever you want (e.g. a project repo or your user config directory) and add your agent's hooks config so it runs the bundle's `bin/run-hook.sh <hook-name>` for the events you need.
 
 ```bash
-./install.sh --agent cursor --scope user
+./install.sh --agent <agent>
 ```
 
-- **`--agent`** — Your agent (e.g. `cursor`, `github-copilot`).
-- No `--target-dir` needed; the script uses your home directory (e.g. `~/.cursor/1password-hooks` for Cursor, `~/.config/github-copilot/1password-hooks` for GitHub Copilot).
+**Examples:**
 
-If the script says hooks are already installed, it will ask before overwriting so you don't lose any changes you made. Type `y` to continue or `n` to cancel.
+```bash
+# Cursor: creates cursor-1password-hooks-bundle/ in cwd
+./install.sh --agent cursor
 
-### Config file already exists
+# GitHub Copilot: creates github-copilot-1password-hooks-bundle/ in cwd
+./install.sh --agent github-copilot
+```
 
-The install script only creates the agent's config file (e.g. `hooks.json`) when it doesn't already exist. If you see a message that the config already exists, the script has copied the hook files but **has not** added or changed entries in your config.
+Then move that folder (e.g. into a project's `.cursor/` or `.github/`, or into `~/.cursor/` for user-level).
+
+⚠️ When you use Bundle, the script does not create a (hooks.json). You'll need to add or update manually. See **Config File** section below.
+
+### 2. Bundle and Move
+
+Install the bundle into a target directory (e.g. a project repo). The script creates the bundle there and, if the agent's config file doesn't already exist, creates it from a template with the correct path to `run-hook.sh`.
+
+```bash
+./install.sh --agent <agent> --target-dir /path/to/repo
+```
+
+**Examples:**
+
+```bash
+# Cursor: installs into repo/.cursor/cursor-1password-hooks-bundle and repo/.cursor/hooks.json (if missing)
+./install.sh --agent cursor --target-dir /path/to/your/repo
+
+# GitHub Copilot: installs into repo/.github/github-copilot-1password-hooks-bundle and repo/.github/hooks.json (if missing)
+./install.sh --agent github-copilot --target-dir /path/to/your/repo
+```
+
+If the install directory already exists, the script will ask before overwriting. Type `y` to continue or `n` to cancel.
+
+⚠️ You may see a warning that a config file was not created. When you use --target-dir, the script never overwrites an existing config file. It only creates one from a template when the file is missing. See instructions below.
+
+### Config File
+
+For **Bundle**, the script does not create a config file. When you use **Bundle and Move**, the script only creates the agent's config file when it doesn't already exist; it never overwrites an existing config file. If you see a message that the config already exists, the script has copied the hook files but **has not** added or changed entries in your config.
 
 **What to do:**
 
-1. Open the config file at the path the script printed (e.g. `.cursor/hooks.json` or `.github/hooks.json`).
-2. Add or update hook entries. Use a template in this repo as reference: [.cursor/hooks.json](./.cursor/hooks.json) or [.github/hooks.json](./.github/hooks.json).
-3. Each entry should run `bin/run-hook.sh <hook-name>` for the event you want (e.g. `beforeShellExecution` for Cursor, `PreToolUse` for GitHub Copilot).
-4. The path to `run-hook.sh` must be relative to the config file's directory. For project scope that's usually `1password-hooks/bin/run-hook.sh`.
+1. Open the config file at the path the script printed (agent-specific; see [Supported agents](#supported-agents) or the templates in this repo).
+2. Add or update hook entries so they run `<bundle-name>/bin/run-hook.sh <hook-name>` for the events you want. The path is relative to the config file's directory.
+3. Use this repo's templates as reference: [.cursor/hooks.json](./.cursor/hooks.json), [.github/hooks.json](./.github/hooks.json).
 
-**Example** (Cursor, project scope — add this inside the `"hooks"` object in your `.cursor/hooks.json`):
+**Example (Cursor)** — inside the `"hooks"` object in `.cursor/hooks.json`:
 
 ```json
 "beforeShellExecution": [
   {
-    "command": "1password-hooks/bin/run-hook.sh 1password-validate-mounted-env-files"
+    "command": "cursor-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
   }
 ]
 ```
 
-For GitHub Copilot use the event `"PreToolUse"` and the path may differ (e.g. `1password-hooks/bin/run-hook.sh` under `.github/`). See [.github/hooks.json](./.github/hooks.json) for a full example.
+**Example (GitHub Copilot)** — use the event `PreToolUse` and path `github-copilot-1password-hooks-bundle/bin/run-hook.sh`. See [.github/hooks.json](./.github/hooks.json) for an example.
 
 ### Verifying installation
 
-1. **Hook files** — The install directory should contain `bin/run-hook.sh`, `lib/`, `adapters/`, and `hooks/`.
-2. **Config** — Your agent's config file (e.g. `.cursor/hooks.json`) should include an entry that runs `run-hook.sh` with the hook name.
-3. **Run it** — Use the agent as usual; the hook runs on the configured event. Check the agent's output or logs to confirm.
+1. **Hook files** — The bundle directory should contain `bin/run-hook.sh`, `lib/`, `adapters/`, and `hooks/`.
+2. **Config** — Your agent's config file should include an entry that runs `run-hook.sh` with the hook name.
+3. **Run it** — Use the agent or IDE as usual; the hook runs on the configured event. Check the agent's output or logs to confirm.
