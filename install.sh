@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
 # Install agent hooks for Cursor or GitHub Copilot.
-# Copies files only; does not create or modify hooks.json (you add entries yourself).
-# Run from this repo; can install into this repo (project/user) or into --target-dir.
+# Copies hook files into the install dir (from install-client-config.json). Creates hooks.json from template if missing; does not overwrite an existing hooks.json.
+# Run from this repo; installs into current directory or --target-dir (project scope only). Use --bundle for a portable copy.
 #
-# Usage: ./install.sh [--agent cursor|github-copilot] [--scope user|project] [--target-dir DIR]
+# Usage: ./install.sh [--agent cursor|github-copilot] [--scope project] [--target-dir DIR]
 #        ./install.sh [--agent cursor|github-copilot] --bundle
 #
 set -euo pipefail
@@ -18,12 +18,12 @@ fi
 CONFIG_PATH="${REPO_ROOT}/${CONFIG_NAME}"
 
 usage() {
-  echo "Usage: $0 --agent cursor|github-copilot [--scope user|project] [--target-dir DIR]"
+  echo "Usage: $0 --agent cursor|github-copilot [--scope project] [--target-dir DIR]"
   echo "       $0 --agent cursor|github-copilot --bundle"
   echo ""
   echo "  --agent      (required) Agent to install (example: cursor, github-copilot)"
-  echo "  --scope      user = user paths (e.g. under \$HOME). project = project paths (default; use with --target-dir to install into another repo)."
-  echo "  --target-dir Install into DIR (for --scope project only)."
+  echo "  --scope      project = project paths (default; use with --target-dir to install into another repo)."
+  echo "  --target-dir Install into DIR (project scope)."
   echo "  --bundle     Create a portable directory with hook files only (no hooks.json) in the current directory as <agent>-1password-hooks-bundle. Move it where you like and add hooks.json yourself. Mutually exclusive with --scope and --target-dir."
   echo ""
   exit 1
@@ -180,8 +180,8 @@ if [[ -n "$BUNDLE_DIR" ]]; then
   SCOPE="bundle"
 fi
 
-if [[ "$SCOPE" != "bundle" && "$SCOPE" != "user" && "$SCOPE" != "project" ]]; then
-  echo "Error: --scope must be 'user' or 'project'"
+if [[ "$SCOPE" != "bundle" && "$SCOPE" != "project" ]]; then
+  echo "Error: --scope must be 'project'"
   exit 1
 fi
 
@@ -237,11 +237,7 @@ else
     BASE="$(cd "$TARGET_DIR" && pwd)"
     echo "Target directory: $BASE"
   else
-    if [[ "$SCOPE" == "user" ]]; then
-      BASE="${HOME}"
-    else
-      BASE="$(pwd)"
-    fi
+    BASE="$(pwd)"
   fi
   INSTALL_DIR="${BASE}/${INSTALL_DIR_REL}"
   CONFIG_FILE="${BASE}/${CONFIG_PATH_REL}"
@@ -310,13 +306,7 @@ if [[ "$SCOPE" != "bundle" && -n "$CONFIG_FILE" ]]; then
     template="${REPO_ROOT}/${CONFIG_PATH_REL}"
     if [[ -f "$template" ]]; then
       cp "$template" "$CONFIG_FILE"
-      # Fix command path: project = from repo root; user = from config dir
-      if [[ "$SCOPE" == "project" ]]; then
-        SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
-      else
-        CONFIG_DIR_REL="$(dirname "$CONFIG_PATH_REL")"
-        SCRIPT_PATH_REL="${INSTALL_DIR_REL#${CONFIG_DIR_REL}/}/bin/run-hook.sh"
-      fi
+      SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
       SCRIPT_PATH_REL_SED="${SCRIPT_PATH_REL//\\/\\\\}"
       SCRIPT_PATH_REL_SED="${SCRIPT_PATH_REL_SED//&/\\&}"
       if sed --version 2>/dev/null | grep -q GNU; then
