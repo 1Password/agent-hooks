@@ -4,7 +4,7 @@
 # Copies files only; does not create or modify hooks.json (you add entries yourself).
 # Run from this repo; can install into this repo (project/user) or into --target-dir.
 #
-# Usage: ./install.sh [--agent cursor|github-copilot] [--scope user|project] [--target-dir DIR]
+# Usage: ./install.sh [--agent cursor|github-copilot] [--scope user|project|global] [--target-dir DIR]
 #
 set -euo pipefail
 
@@ -17,11 +17,11 @@ fi
 CONFIG_PATH="${REPO_ROOT}/${CONFIG_NAME}"
 
 usage() {
-  echo "Usage: $0 --agent cursor|github-copilot [--scope user|project] [--target-dir DIR]"
+  echo "Usage: $0 --agent cursor|github-copilot [--scope user|project|global] [--target-dir DIR]"
   echo ""
   echo "  --agent      (required) Agent to install (example: cursor, github-copilot)"
-  echo "  --scope      user = use user paths (e.g. under $HOME). project = use project paths (default; use with --target-dir to install into another repo)."
-  echo "  --target-dir Install into DIR (example: install from this repo into another: --target-dir /path/to/other/repo)"
+  echo "  --scope      user = user paths (e.g. under \$HOME). project = project paths (default; use with --target-dir to install into another repo). global = system-wide (requires root)."
+  echo "  --target-dir Install into DIR (not allowed with --scope global)"
   echo ""
   exit 1
 }
@@ -161,9 +161,21 @@ if [[ -z "$AGENT" ]]; then
   usage
 fi
 
-if [[ "$SCOPE" != "user" && "$SCOPE" != "project" ]]; then
-  echo "Error: --scope must be 'user' or 'project'"
+if [[ "$SCOPE" != "user" && "$SCOPE" != "project" && "$SCOPE" != "global" ]]; then
+  echo "Error: --scope must be 'user', 'project', or 'global'"
   exit 1
+fi
+
+if [[ "$SCOPE" == "global" && -n "${TARGET_DIR:-}" ]]; then
+  echo "Error: --target-dir is not allowed with --scope global" >&2
+  exit 1
+fi
+
+if [[ "$SCOPE" == "global" ]]; then
+  if [[ $(id -u) -ne 0 ]]; then
+    echo "Error: --scope global requires root (e.g. run with sudo)" >&2
+    exit 1
+  fi
 fi
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
@@ -201,24 +213,35 @@ if [[ "$INSTALL_DIR_REL" == *$'\n'* || "$CONFIG_PATH_REL" == *$'\n'* ]]; then
   exit 1
 fi
 
-# Resolve base directory
-if [[ -n "${TARGET_DIR:-}" ]]; then
-  if [[ ! -d "$TARGET_DIR" ]]; then
-    echo "Error: target directory does not exist: $TARGET_DIR"
+if [[ "$SCOPE" == "global" ]]; then
+  if [[ "${INSTALL_DIR_REL:0:1}" != "/" || "${CONFIG_PATH_REL:0:1}" != "/" ]]; then
+    echo "Error: for --scope global, install_dir and config_path must be absolute paths." >&2
     exit 1
-  fi
-  BASE="$(cd "$TARGET_DIR" && pwd)"
-  echo "Target directory: $BASE"
-else
-  if [[ "$SCOPE" == "user" ]]; then
-    BASE="${HOME}"
-  else
-    BASE="$(pwd)"
   fi
 fi
 
-INSTALL_DIR="${BASE}/${INSTALL_DIR_REL}"
-CONFIG_FILE="${BASE}/${CONFIG_PATH_REL}"
+# Resolve base directory (not used for global scope)
+if [[ "$SCOPE" == "global" ]]; then
+  INSTALL_DIR="$INSTALL_DIR_REL"
+  CONFIG_FILE="$CONFIG_PATH_REL"
+else
+  if [[ -n "${TARGET_DIR:-}" ]]; then
+    if [[ ! -d "$TARGET_DIR" ]]; then
+      echo "Error: target directory does not exist: $TARGET_DIR"
+      exit 1
+    fi
+    BASE="$(cd "$TARGET_DIR" && pwd)"
+    echo "Target directory: $BASE"
+  else
+    if [[ "$SCOPE" == "user" ]]; then
+      BASE="${HOME}"
+    else
+      BASE="$(pwd)"
+    fi
+  fi
+  INSTALL_DIR="${BASE}/${INSTALL_DIR_REL}"
+  CONFIG_FILE="${BASE}/${CONFIG_PATH_REL}"
+fi
 
 echo "Agent: $AGENT | Scope: $SCOPE"
 echo "Install dir:  $INSTALL_DIR"
@@ -277,11 +300,22 @@ done < <(get_hook_events "$AGENT_BLOCK")
 # Create hooks config only if it doesn't exist
 if [[ ! -f "$CONFIG_FILE" ]]; then
   mkdir -p "$(dirname "$CONFIG_FILE")"
-  template="${REPO_ROOT}/${CONFIG_PATH_REL}"
+  if [[ "$SCOPE" == "global" ]]; then
+    template_rel=$(get_string_key "$SCOPE_BLOCK" "config_template") || true
+    if [[ -z "$template_rel" ]]; then
+      PROJECT_BLOCK=$(get_json_block "$AGENT_BLOCK" "project") || true
+      template_rel=$(get_string_key "$PROJECT_BLOCK" "config_path") || true
+    fi
+    template="${REPO_ROOT}/${template_rel}"
+  else
+    template="${REPO_ROOT}/${CONFIG_PATH_REL}"
+  fi
   if [[ -f "$template" ]]; then
     cp "$template" "$CONFIG_FILE"
-    # Fix command path: project = from repo root; user = from config dir
+    # Fix command path: project = from repo root; user = from config dir; global = absolute path
     if [[ "$SCOPE" == "project" ]]; then
+      SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
+    elif [[ "$SCOPE" == "global" ]]; then
       SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
     else
       CONFIG_DIR_REL="$(dirname "$CONFIG_PATH_REL")"

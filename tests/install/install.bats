@@ -25,7 +25,19 @@ T="$BATS_TEST_TMPDIR"
 @test "install.sh invalid --scope exits non-zero" {
   run bash "${INSTALL_SCRIPT}" --agent cursor --scope invalid --target-dir "${T}"
   [[ $status -ne 0 ]]
-  [[ "$output" == *"must be 'user' or 'project'"* ]]
+  [[ "$output" == *"must be 'user', 'project', or 'global'"* ]]
+}
+
+@test "install.sh --scope global without root exits non-zero" {
+  run bash "${INSTALL_SCRIPT}" --agent cursor --scope global
+  [[ $status -ne 0 ]]
+  [[ "$output" == *"requires root"* ]]
+}
+
+@test "install.sh --scope global with --target-dir exits non-zero" {
+  run bash "${INSTALL_SCRIPT}" --agent cursor --scope global --target-dir "${T}"
+  [[ $status -ne 0 ]]
+  [[ "$output" == *"not allowed with --scope global"* ]]
 }
 
 @test "install.sh nonexistent --target-dir exits non-zero" {
