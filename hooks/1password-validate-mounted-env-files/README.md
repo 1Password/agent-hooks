@@ -129,7 +129,7 @@ The command must run `run-hook.sh` with the hook name. The path to `run-hook.sh`
 }
 ```
 
-For other agents, use the event and config path for your agent. See [.github/hooks.json](../../.github/hooks.json) in this repo for another example.
+For other agents, use the event and config path for your agent. See [.github/hooks/hooks.json](../../.github/hooks/hooks.json) in this repo for another example.
 
 ### Dependencies
 

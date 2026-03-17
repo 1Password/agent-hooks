@@ -8,7 +8,7 @@ This repository provides 1Password agent hooks that run inside supported IDEs an
 
 Configuration is agent-specific and may use config files or editor settings. Scope depends on the agent:
 
-- **Project-specific**: e.g. `.cursor/hooks.json` or `.github/hooks.json` in the project root (applies only to that project)
+- **Project-specific**: e.g. `.cursor/hooks.json` or `.github/hooks/hooks.json` in the project root (applies only to that project)
 
 Other levels (user-specific or global) may be supported by some agents. See each agent’s documentation for details. The table below in **Supported Agents** references documentation.
 
@@ -72,7 +72,7 @@ Install the bundle into a target directory (e.g. a project repo). The script cre
 # Cursor: installs into repo/.cursor/cursor-1password-hooks-bundle and repo/.cursor/hooks.json
 ./install.sh --agent cursor --target-dir /path/to/your/repo
 
-# GitHub Copilot: installs into repo/.github/github-copilot-1password-hooks-bundle and repo/.github/hooks.json
+# GitHub Copilot: installs into repo/.github/github-copilot-1password-hooks-bundle and repo/.github/hooks/hooks.json
 ./install.sh --agent github-copilot --target-dir /path/to/your/repo
 ```
 
@@ -86,12 +86,12 @@ For **Bundle**, the script does not create a config file. When you use **Bundle 
 
 **What to do:**
 
-- **Bundle** — The script didn’t create a config file. Create it at your agent’s path (e.g. `.cursor/hooks.json` or `.github/hooks.json`), then add hook entries as in the examples below.
+- **Bundle** — The script didn’t create a config file. Create it at your agent’s path (e.g. `.cursor/hooks.json` or `.github/hooks/hooks.json`), then add hook entries as in the examples below.
 - **Bundle and Move** — The script did not create the config because it already existed at the target directory. Open it at the path the script printed and add or update hook entries as below.
 
 **Steps (both):**
 
-1. Open (or create) the config file at your agent’s path (e.g `.cursor/hooks.json` or `.github/hooks.json`).
+1. Open (or create) the config file at your agent’s path (e.g `.cursor/hooks.json` or `.github/hooks/hooks.json`).
 2. Add or update hook entries so they run `<bundle-name>/bin/run-hook.sh <hook-name>` for the events you want. The path is relative to the config file’s directory.
 
 **Example of config file** - `.cursor/hooks.json`:
