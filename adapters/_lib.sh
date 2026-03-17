@@ -19,11 +19,14 @@ source "${_ADAPTERS_DIR}/../lib/json.sh"
 #
 # Signals per client (from official docs):
 #   Cursor:         CURSOR_VERSION env var; `cursor_version` payload field
+#   GitHub Copilot: `hook_event_name` payload field (same key as Cursor —
+#                   detected by process of elimination after Cursor is
+#                   ruled out)
+#
+# Future clients (not yet implemented):
 #   Windsurf:       `agent_action_name` payload field (unique)
 #   Claude Code:    CLAUDE_PROJECT_DIR env var (after ruling out Cursor);
 #                   `permission_mode` payload field (unique)
-#   GitHub Copilot: `hookEventName` payload field (camelCase key, distinct
-#                   from Cursor's snake_case `hook_event_name`)
 #
 # Usage: detected=$(detect_client "$raw_payload")
 detect_client() {
@@ -36,23 +39,10 @@ detect_client() {
         return 0
     fi
 
-    # 2. Windsurf — agent_action_name is unique to Windsurf payloads.
-    if json_has_key "$raw_payload" "agent_action_name"; then
-        echo "windsurf"
-        return 0
-    fi
-
-    # 3. Claude Code — CLAUDE_PROJECT_DIR is set by Claude Code (Cursor also
-    #    sets it, but was already caught above). permission_mode is unique to
-    #    Claude Code payloads.
-    if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]] || json_has_key "$raw_payload" "permission_mode"; then
-        echo "claude"
-        return 0
-    fi
-
-    # 4. GitHub Copilot (VS Code) — uses camelCase hookEventName (not
-    #    snake_case hook_event_name like Cursor/Claude Code).
-    if json_has_key "$raw_payload" "hookEventName"; then
+    # 2. GitHub Copilot (VS Code) — shares `hook_event_name` with Cursor.
+    #    By this point Cursor is already ruled out, so the presence of
+    #    hook_event_name means Copilot.
+    if json_has_key "$raw_payload" "hook_event_name"; then
         echo "github-copilot"
         return 0
     fi

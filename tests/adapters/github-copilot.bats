@@ -8,7 +8,7 @@ setup() {
     source "${PROJECT_ROOT}/adapters/github-copilot.sh"
 }
 
-COPILOT_PAYLOAD='{"hookEventName": "PreToolUse", "tool_name": "run_in_terminal", "cwd": "/Users/bob/project", "command": "make test"}'
+COPILOT_PAYLOAD='{"hook_event_name": "PreToolUse", "tool_name": "run_in_terminal", "cwd": "/Users/bob/project", "command": "make test"}'
 
 # ========== normalize_input ==========
 

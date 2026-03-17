@@ -6,6 +6,6 @@
         "command": "bin/run-hook.sh 1password-validate-mounted-env-files",
         "timeout": 15
       }
-    ]
+		]
   }
 }
