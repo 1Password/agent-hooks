@@ -1,7 +1,7 @@
 # GitHub Copilot (VS Code) adapter.
 #
 # Copilot input payload (PreToolUse):
-#   {"hookEventName": "PreToolUse", "tool_name": "run_in_terminal",
+#   {"hook_event_name": "PreToolUse", "tool_name": "run_in_terminal",
 #    "cwd": "...", "sessionId": "...", "timestamp": "..."}
 #
 # Copilot output:

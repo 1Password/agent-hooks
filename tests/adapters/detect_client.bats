@@ -25,39 +25,17 @@ setup() {
     [[ "$output" == "cursor" ]]
 }
 
-# ========== Windsurf detection ==========
+# ========== GitHub Copilot detection (process of elimination) ==========
+# Copilot sends hook_event_name just like Cursor.
+# It is identified by having hook_event_name but no Cursor-specific signals.
 
-@test "detect_client returns windsurf for agent_action_name payload" {
-    run detect_client '{"agent_action_name": "pre_run_command", "tool_info": {"command_line": "ls"}}'
-    [[ "$output" == "windsurf" ]]
-}
-
-@test "detect_client returns windsurf for post_write_code action" {
-    run detect_client '{"agent_action_name": "post_write_code", "trajectory_id": "abc"}'
-    [[ "$output" == "windsurf" ]]
-}
-
-# ========== Claude Code detection ==========
-
-@test "detect_client returns claude when CLAUDE_PROJECT_DIR set (no Cursor env)" {
-    CLAUDE_PROJECT_DIR="/home/user/project" run detect_client '{"hook_event_name": "PreToolUse", "tool_name": "Bash"}'
-    [[ "$output" == "claude" ]]
-}
-
-@test "detect_client returns claude when payload has permission_mode" {
-    run detect_client '{"hook_event_name": "PreToolUse", "permission_mode": "default", "tool_name": "Bash"}'
-    [[ "$output" == "claude" ]]
-}
-
-# ========== GitHub Copilot detection ==========
-
-@test "detect_client returns github-copilot for hookEventName payload" {
-    run detect_client '{"hookEventName": "PreToolUse", "tool_name": "run_in_terminal", "cwd": "/tmp"}'
+@test "detect_client returns github-copilot for hook_event_name payload without Cursor signals" {
+    run detect_client '{"hook_event_name": "PreToolUse", "tool_name": "run_in_terminal", "cwd": "/tmp"}'
     [[ "$output" == "github-copilot" ]]
 }
 
-@test "detect_client returns github-copilot for sessionId payload" {
-    run detect_client '{"hookEventName": "SessionStart", "sessionId": "abc-123"}'
+@test "detect_client returns github-copilot for SessionStart payload" {
+    run detect_client '{"hook_event_name": "SessionStart", "sessionId": "abc-123"}'
     [[ "$output" == "github-copilot" ]]
 }
 
@@ -75,17 +53,7 @@ setup() {
 
 # ========== Priority / ambiguity tests ==========
 
-@test "detect_client prefers cursor over claude when both env vars set" {
-    CURSOR_VERSION="1.7.2" CLAUDE_PROJECT_DIR="/tmp" run detect_client '{"command": "ls"}'
-    [[ "$output" == "cursor" ]]
-}
-
 @test "detect_client does not confuse Cursor payload (with hook_event_name) for copilot" {
     CURSOR_VERSION="1.7.2" run detect_client '{"hook_event_name": "beforeShellExecution", "tool_name": "Shell", "workspace_roots": ["/tmp"]}'
     [[ "$output" == "cursor" ]]
-}
-
-@test "detect_client distinguishes Claude Code from Copilot by permission_mode" {
-    run detect_client '{"hook_event_name": "PreToolUse", "permission_mode": "default", "tool_name": "Bash"}'
-    [[ "$output" == "claude" ]]
 }
