@@ -147,16 +147,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Ensure an agent is specified
 if [[ -z "$AGENT" ]]; then
   echo "Error: --agent is required (cursor or github-copilot)" >&2
   usage
 fi
 
+# Ensure the config file exists
 if [[ ! -f "$CONFIG_PATH" ]]; then
   echo "Error: config not found: $CONFIG_PATH"
   exit 1
 fi
 
+# Get the agent block
 CONFIG_CONTENT=$(cat "$CONFIG_PATH")
 AGENT_BLOCK=$(get_json_block "$CONFIG_CONTENT" "$AGENT") || true
 if [[ -z "$AGENT_BLOCK" ]]; then
@@ -164,12 +167,14 @@ if [[ -z "$AGENT_BLOCK" ]]; then
   exit 1
 fi
 
+# Get the project block used for the install directory and config path
 SCOPE_BLOCK=$(get_json_block "$AGENT_BLOCK" "project") || true
 if [[ -z "$SCOPE_BLOCK" ]]; then
   echo "Error: could not find project block for: $AGENT"
   exit 1
 fi
 
+# Get the install directory and config path relative to the project block
 INSTALL_DIR_REL=$(get_string_key "$SCOPE_BLOCK" "install_dir") || true
 CONFIG_PATH_REL=$(get_string_key "$SCOPE_BLOCK" "config_path") || true
 if [[ -z "$INSTALL_DIR_REL" || -z "$CONFIG_PATH_REL" ]]; then
@@ -177,6 +182,7 @@ if [[ -z "$INSTALL_DIR_REL" || -z "$CONFIG_PATH_REL" ]]; then
   exit 1
 fi
 
+# Reject unsafe relative paths
 if is_unsafe_relative_path "$INSTALL_DIR_REL" || is_unsafe_relative_path "$CONFIG_PATH_REL"; then
   echo "Error: install_dir or config_path may not contain '..' (path traversal)." >&2
   exit 1
@@ -260,16 +266,21 @@ while IFS=$'\t' read -r event hook_name; do
   fi
 done < <(get_hook_events "$AGENT_BLOCK")
 
-# Create hooks.json only when --target-dir was set: from template if missing; never overwrite existing
+# Create hooks.json only when --target-dir was set: from template if missing and never overwrite existing
 if [[ -n "$CONFIG_FILE" ]]; then
   if [[ ! -f "$CONFIG_FILE" ]]; then
     mkdir -p "$(dirname "$CONFIG_FILE")"
     template="${REPO_ROOT}/${CONFIG_PATH_REL}"
+
+    # Template is the repo file at the same path (.cursor/hooks.json).
     if [[ -f "$template" ]]; then
       cp "$template" "$CONFIG_FILE"
+      # Replace placeholder "bin/run-hook.sh" in template with install-relative path (cursor-1password-hooks-bundle/bin/run-hook.sh).
       SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
       SCRIPT_PATH_REL_SED="${SCRIPT_PATH_REL//\\/\\\\}"
       SCRIPT_PATH_REL_SED="${SCRIPT_PATH_REL_SED//&/\\&}"
+
+      # Replace "bin/run-hook.sh" in the copied config with the install path so the agent runs the correct script.
       if sed --version 2>/dev/null | grep -q GNU; then
         sed -i "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE"
       else
