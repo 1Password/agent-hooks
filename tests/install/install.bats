@@ -117,17 +117,17 @@ EOF
   [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/adapters/github-copilot.sh" ]]
   [[ ! -f "${T}/.github/github-copilot-1password-hooks-bundle/adapters/cursor.sh" ]]
   [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
-  [[ -f "${T}/.github/hooks.json" ]]
+  [[ -f "${T}/.github/hooks/hooks.json" ]]
   [[ "$output" == *"Done. Hook(s) installed"* ]]
 }
 
 @test "github-copilot: does not overwrite existing hooks.json" {
-  mkdir -p "${T}/.github"
-  echo '{"version":1,"hooks":{"PreToolUse":[]}}' > "${T}/.github/hooks.json"
+  mkdir -p "${T}/.github/hooks"
+  echo '{"version":1,"hooks":{"PreToolUse":[]}}' > "${T}/.github/hooks/hooks.json"
   run bash "${INSTALL_SCRIPT}" --agent github-copilot --target-dir "${T}"
   [[ $status -eq 0 ]]
   [[ "$output" == *"Config already exists at"* ]]
-  [[ "$(cat "${T}/.github/hooks.json")" == '{"version":1,"hooks":{"PreToolUse":[]}}' ]]
+  [[ "$(cat "${T}/.github/hooks/hooks.json")" == '{"version":1,"hooks":{"PreToolUse":[]}}' ]]
 }
 
 # ---- Smoke: installed run-hook.sh is runnable ----
