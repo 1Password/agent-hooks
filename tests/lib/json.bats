@@ -80,6 +80,33 @@ setup() {
     [[ "$output" == "PreToolUse" ]]
 }
 
+@test "extract_json_string handles escaped quotes in value" {
+    local json='{"message": "Environment name: \"cursor-hook-test\". Path: \"/tmp/.env\"."}'
+    run extract_json_string "$json" "message"
+    [[ "$output" == 'Environment name: "cursor-hook-test". Path: "/tmp/.env".' ]]
+}
+
+@test "extract_json_string handles escaped backslashes in value" {
+    local json='{"path": "C:\\Users\\alice"}'
+    run extract_json_string "$json" "path"
+    [[ "$output" == 'C:\Users\alice' ]]
+}
+
+@test "extract_json_string handles mixed escaped quotes and backslashes" {
+    local json='{"msg": "say \\\"hello\\\""}'
+    run extract_json_string "$json" "msg"
+    [[ "$output" == 'say \"hello\"' ]]
+}
+
+@test "extract_json_string roundtrips through escape_json_string" {
+    local original='Environment name: "test". Path: "/tmp/.env".'
+    local escaped
+    escaped=$(escape_json_string "$original")
+    local json="{\"message\": \"${escaped}\"}"
+    run extract_json_string "$json" "message"
+    [[ "$output" == "$original" ]]
+}
+
 # ========== parse_json_workspace_roots ==========
 
 @test "parse_json_workspace_roots extracts single-line array" {

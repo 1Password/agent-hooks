@@ -17,24 +17,35 @@ escape_json_string() {
     str="${str//$'\n'/\\n}"
     str="${str//$'\r'/\\r}"
     str="${str//$'\t'/\\t}"
-    echo "$str"
+    printf '%s\n' "$str"
 }
 
 # Extract the first JSON string field that matches the provided key.
 # This is a lightweight helper to avoid adding dependencies like jq.
+# Handles escaped characters inside JSON string values (e.g. \", \\).
 # Usage: val=$(extract_json_string "$json" "field_name")
 extract_json_string() {
     local json="$1"
     local key="$2"
     local value
 
+    # ([^"\\]|\\.)* matches JSON string contents including escaped quotes (\")
+    # and escaped backslashes (\\). [^"\\] matches any char except " and \,
+    # while \\. matches a backslash followed by any character.
+    # printf is used instead of echo to avoid backslash interpretation on macOS.
     value=$(
-        echo "$json" | grep -oE "\"${key}\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+        printf '%s\n' "$json" | grep -oE "\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"\\\\]|\\\\.)*\"" \
             | head -n 1 \
-            | sed -E "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/" || true
+            | sed -E "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"(([^\"\\\\]|\\\\.)*)\".*/\1/" || true
     )
 
-    echo "$value"
+    # Unescape JSON string sequences so callers see the decoded value.
+    if [[ -n "$value" ]]; then
+        value="${value//\\\"/\"}"
+        value="${value//\\\\/\\}"
+    fi
+
+    printf '%s\n' "$value"
     return 0
 }
 
@@ -83,5 +94,5 @@ parse_json_workspace_roots() {
 json_has_key() {
     local json="$1"
     local key="$2"
-    echo "$json" | grep -qE "\"${key}\"[[:space:]]*:"
+    printf '%s\n' "$json" | grep -qE "\"${key}\"[[:space:]]*:"
 }

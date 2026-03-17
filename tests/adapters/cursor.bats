@@ -101,3 +101,11 @@ CURSOR_PAYLOAD='{"command": "npm run build", "workspace_roots": ["/Users/alice/p
     run emit_output "$canonical"
     [[ "$status" -eq 0 ]]
 }
+
+@test "emit_output preserves environment name in deny message with escaped quotes" {
+    local canonical='{"decision": "deny", "message": "Environment name: \"cursor-hook-test\". Path: \"/tmp/.env\"."}'
+    run emit_output "$canonical"
+    [[ "$status" -eq 0 ]]
+    [[ "$output" == *'cursor-hook-test'* ]]
+    [[ "$output" == *'/tmp/.env'* ]]
+}
