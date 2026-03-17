@@ -25,25 +25,42 @@ T="$BATS_TEST_TMPDIR"
 @test "install.sh invalid --scope exits non-zero" {
   run bash "${INSTALL_SCRIPT}" --agent cursor --scope invalid --target-dir "${T}"
   [[ $status -ne 0 ]]
-  [[ "$output" == *"must be 'user', 'project', or 'global'"* ]]
+  [[ "$output" == *"must be 'user' or 'project'"* ]]
 }
 
-@test "install.sh --scope global without root exits non-zero" {
-  run bash "${INSTALL_SCRIPT}" --agent cursor --scope global
+@test "install.sh --bundle with --scope exits non-zero" {
+  run bash "${INSTALL_SCRIPT}" --agent cursor --bundle --scope user
   [[ $status -ne 0 ]]
-  [[ "$output" == *"requires root"* ]]
+  [[ "$output" == *"mutually exclusive"* ]]
 }
 
-@test "install.sh --scope global with --target-dir exits non-zero" {
-  run bash "${INSTALL_SCRIPT}" --agent cursor --scope global --target-dir "${T}"
+@test "install.sh --bundle with --target-dir exits non-zero" {
+  run bash "${INSTALL_SCRIPT}" --agent cursor --bundle --target-dir "${T}"
   [[ $status -ne 0 ]]
-  [[ "$output" == *"not allowed with --scope global"* ]]
+  [[ "$output" == *"mutually exclusive"* ]]
+}
+
+@test "install.sh --bundle with --scope project exits non-zero" {
+  run bash "${INSTALL_SCRIPT}" --agent cursor --bundle --scope project
+  [[ $status -ne 0 ]]
+  [[ "$output" == *"mutually exclusive"* ]]
 }
 
 @test "install.sh nonexistent --target-dir exits non-zero" {
   run bash "${INSTALL_SCRIPT}" --agent cursor --target-dir "${T}/nonexistent"
   [[ $status -ne 0 ]]
   [[ "$output" == *"does not exist"* ]]
+}
+
+@test "install.sh --bundle creates hook files and does not create hooks.json" {
+  run bash -c "cd '${T}' && bash '${INSTALL_SCRIPT}' --agent cursor --bundle"
+  [[ $status -eq 0 ]]
+  [[ -f "${T}/cursor-1password-hooks-bundle/bin/run-hook.sh" ]]
+  [[ -f "${T}/cursor-1password-hooks-bundle/adapters/cursor.sh" ]]
+  [[ -f "${T}/cursor-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
+  [[ "$output" == *"Bundle created at:"* ]]
+  [[ "$output" == *"Add hooks.json"* ]]
+  [[ ! -f "${T}/cursor-1password-hooks-bundle/hooks.json" ]]
 }
 
 # ---- Cursor: install paths ----

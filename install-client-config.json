@@ -11,11 +11,6 @@
       "project": {
         "install_dir": ".cursor/1password-hooks",
         "config_path": ".cursor/hooks.json"
-      },
-      "global": {
-        "install_dir": "/usr/local/share/cursor/1password-hooks",
-        "config_path": "/etc/cursor/hooks.json",
-        "config_template": ".cursor/hooks.json"
       }
     },
     "github-copilot": {
@@ -30,11 +25,6 @@
       "project": {
         "install_dir": ".github/1password-hooks",
         "config_path": ".github/hooks.json"
-      },
-      "global": {
-        "install_dir": "/usr/local/share/github-copilot/1password-hooks",
-        "config_path": "/etc/github-copilot/hooks.json",
-        "config_template": ".github/hooks.json"
       }
     }
   }

@@ -4,7 +4,8 @@
 # Copies files only; does not create or modify hooks.json (you add entries yourself).
 # Run from this repo; can install into this repo (project/user) or into --target-dir.
 #
-# Usage: ./install.sh [--agent cursor|github-copilot] [--scope user|project|global] [--target-dir DIR]
+# Usage: ./install.sh [--agent cursor|github-copilot] [--scope user|project] [--target-dir DIR]
+#        ./install.sh [--agent cursor|github-copilot] --bundle
 #
 set -euo pipefail
 
@@ -17,11 +18,13 @@ fi
 CONFIG_PATH="${REPO_ROOT}/${CONFIG_NAME}"
 
 usage() {
-  echo "Usage: $0 --agent cursor|github-copilot [--scope user|project|global] [--target-dir DIR]"
+  echo "Usage: $0 --agent cursor|github-copilot [--scope user|project] [--target-dir DIR]"
+  echo "       $0 --agent cursor|github-copilot --bundle"
   echo ""
   echo "  --agent      (required) Agent to install (example: cursor, github-copilot)"
-  echo "  --scope      user = user paths (e.g. under \$HOME). project = project paths (default; use with --target-dir to install into another repo). global = system-wide (requires root)."
-  echo "  --target-dir Install into DIR (not allowed with --scope global)"
+  echo "  --scope      user = user paths (e.g. under \$HOME). project = project paths (default; use with --target-dir to install into another repo)."
+  echo "  --target-dir Install into DIR (for --scope project only)."
+  echo "  --bundle     Create a portable directory with hook files only (no hooks.json) in the current directory as <agent>-1password-hooks-bundle. Move it where you like and add hooks.json yourself. Mutually exclusive with --scope and --target-dir."
   echo ""
   exit 1
 }
@@ -122,7 +125,9 @@ is_unsafe_segment() {
 # ---- Main ----
 AGENT=""
 SCOPE="project"
+SCOPE_EXPLICIT=0
 TARGET_DIR=""
+BUNDLE_DIR=""
 
 # Require a non-option value for the last option; call from case branch before using $2.
 require_value() {
@@ -144,12 +149,17 @@ while [[ $# -gt 0 ]]; do
     --scope)
       require_value "--scope" "${2:-}"
       SCOPE="$2"
+      SCOPE_EXPLICIT=1
       shift 2
       ;;
     --target-dir)
       require_value "--target-dir" "${2:-}"
       TARGET_DIR="$2"
       shift 2
+      ;;
+    --bundle)
+      BUNDLE_DIR="."
+      shift 1
       ;;
     -h|--help) usage ;;
     *) echo "Unknown option: $1" >&2; usage ;;
@@ -161,21 +171,18 @@ if [[ -z "$AGENT" ]]; then
   usage
 fi
 
-if [[ "$SCOPE" != "user" && "$SCOPE" != "project" && "$SCOPE" != "global" ]]; then
-  echo "Error: --scope must be 'user', 'project', or 'global'"
-  exit 1
-fi
-
-if [[ "$SCOPE" == "global" && -n "${TARGET_DIR:-}" ]]; then
-  echo "Error: --target-dir is not allowed with --scope global" >&2
-  exit 1
-fi
-
-if [[ "$SCOPE" == "global" ]]; then
-  if [[ $(id -u) -ne 0 ]]; then
-    echo "Error: --scope global requires root (e.g. run with sudo)" >&2
+if [[ -n "$BUNDLE_DIR" ]]; then
+  if [[ "$SCOPE_EXPLICIT" -ne 0 ]] || [[ -n "${TARGET_DIR:-}" ]]; then
+    echo "Error: --bundle is mutually exclusive with --scope and --target-dir." >&2
     exit 1
   fi
+  BUNDLE_DIR="$(pwd)/${AGENT}-1password-hooks-bundle"
+  SCOPE="bundle"
+fi
+
+if [[ "$SCOPE" != "bundle" && "$SCOPE" != "user" && "$SCOPE" != "project" ]]; then
+  echo "Error: --scope must be 'user' or 'project'"
+  exit 1
 fi
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
@@ -190,7 +197,11 @@ if [[ -z "$AGENT_BLOCK" ]]; then
   exit 1
 fi
 
-SCOPE_BLOCK=$(get_json_block "$AGENT_BLOCK" "$SCOPE") || true
+if [[ "$SCOPE" == "bundle" ]]; then
+  SCOPE_BLOCK=$(get_json_block "$AGENT_BLOCK" "project") || true
+else
+  SCOPE_BLOCK=$(get_json_block "$AGENT_BLOCK" "$SCOPE") || true
+fi
 if [[ -z "$SCOPE_BLOCK" ]]; then
   echo "Error: could not find scope block for: $SCOPE"
   exit 1
@@ -213,17 +224,10 @@ if [[ "$INSTALL_DIR_REL" == *$'\n'* || "$CONFIG_PATH_REL" == *$'\n'* ]]; then
   exit 1
 fi
 
-if [[ "$SCOPE" == "global" ]]; then
-  if [[ "${INSTALL_DIR_REL:0:1}" != "/" || "${CONFIG_PATH_REL:0:1}" != "/" ]]; then
-    echo "Error: for --scope global, install_dir and config_path must be absolute paths." >&2
-    exit 1
-  fi
-fi
-
-# Resolve base directory (not used for global scope)
-if [[ "$SCOPE" == "global" ]]; then
-  INSTALL_DIR="$INSTALL_DIR_REL"
-  CONFIG_FILE="$CONFIG_PATH_REL"
+# Resolve install directory (and config path for non-bundle)
+if [[ "$SCOPE" == "bundle" ]]; then
+  INSTALL_DIR="${BUNDLE_DIR}"
+  CONFIG_FILE=""
 else
   if [[ -n "${TARGET_DIR:-}" ]]; then
     if [[ ! -d "$TARGET_DIR" ]]; then
@@ -245,7 +249,9 @@ fi
 
 echo "Agent: $AGENT | Scope: $SCOPE"
 echo "Install dir:  $INSTALL_DIR"
-echo "Config path: $CONFIG_FILE (created if missing)"
+if [[ -n "$CONFIG_FILE" ]]; then
+  echo "Config path: $CONFIG_FILE (created if missing)"
+fi
 echo ""
 
 if [[ -d "$INSTALL_DIR" ]] && [[ -t 0 ]]; then
@@ -297,46 +303,41 @@ while IFS=$'\t' read -r event hook_name; do
   fi
 done < <(get_hook_events "$AGENT_BLOCK")
 
-# Create hooks config only if it doesn't exist
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  mkdir -p "$(dirname "$CONFIG_FILE")"
-  if [[ "$SCOPE" == "global" ]]; then
-    template_rel=$(get_string_key "$SCOPE_BLOCK" "config_template") || true
-    if [[ -z "$template_rel" ]]; then
-      PROJECT_BLOCK=$(get_json_block "$AGENT_BLOCK" "project") || true
-      template_rel=$(get_string_key "$PROJECT_BLOCK" "config_path") || true
-    fi
-    template="${REPO_ROOT}/${template_rel}"
-  else
+# Create hooks config only if it doesn't exist (skip for --bundle; user creates hooks.json themselves)
+if [[ "$SCOPE" != "bundle" && -n "$CONFIG_FILE" ]]; then
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    mkdir -p "$(dirname "$CONFIG_FILE")"
     template="${REPO_ROOT}/${CONFIG_PATH_REL}"
-  fi
-  if [[ -f "$template" ]]; then
-    cp "$template" "$CONFIG_FILE"
-    # Fix command path: project = from repo root; user = from config dir; global = absolute path
-    if [[ "$SCOPE" == "project" ]]; then
-      SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
-    elif [[ "$SCOPE" == "global" ]]; then
-      SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
-    else
-      CONFIG_DIR_REL="$(dirname "$CONFIG_PATH_REL")"
-      SCRIPT_PATH_REL="${INSTALL_DIR_REL#${CONFIG_DIR_REL}/}/bin/run-hook.sh"
-    fi
-      # Escape for sed replacement: \ and & are special
+    if [[ -f "$template" ]]; then
+      cp "$template" "$CONFIG_FILE"
+      # Fix command path: project = from repo root; user = from config dir
+      if [[ "$SCOPE" == "project" ]]; then
+        SCRIPT_PATH_REL="${INSTALL_DIR_REL}/bin/run-hook.sh"
+      else
+        CONFIG_DIR_REL="$(dirname "$CONFIG_PATH_REL")"
+        SCRIPT_PATH_REL="${INSTALL_DIR_REL#${CONFIG_DIR_REL}/}/bin/run-hook.sh"
+      fi
       SCRIPT_PATH_REL_SED="${SCRIPT_PATH_REL//\\/\\\\}"
       SCRIPT_PATH_REL_SED="${SCRIPT_PATH_REL_SED//&/\\&}"
-    if sed --version 2>/dev/null | grep -q GNU; then
-      sed -i "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE"
+      if sed --version 2>/dev/null | grep -q GNU; then
+        sed -i "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE"
+      else
+        sed -i.bak "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE" && rm -f "${CONFIG_FILE}.bak"
+      fi
+      echo "Created $CONFIG_FILE with default hook entries."
     else
-      sed -i.bak "s|bin/run-hook\.sh|${SCRIPT_PATH_REL_SED}|g" "$CONFIG_FILE" && rm -f "${CONFIG_FILE}.bak"
+      echo "Warning: no template at $template; skipping config creation."
     fi
-    echo "Created $CONFIG_FILE with default hook entries."
   else
-    echo "Warning: no template at $template; skipping config creation."
+    echo "" >&2
+    echo "WARNING: Config already exists at $CONFIG_FILE; update it to add or change hook entries." >&2
+    echo "" >&2
   fi
-else
-  echo "" >&2
-  echo "WARNING: Config already exists at $CONFIG_FILE; update it to add or change hook entries." >&2
-  echo "" >&2
 fi
 
-echo "Done. Hook(s) installed"
+if [[ "$SCOPE" == "bundle" ]]; then
+  echo "Bundle created at: $BUNDLE_DIR"
+  echo "Add hooks.json at your Cursor config path and set command to: ${INSTALL_DIR}/bin/run-hook.sh 1password-validate-mounted-env-files"
+else
+  echo "Done. Hook(s) installed"
+fi
