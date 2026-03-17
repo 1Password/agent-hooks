@@ -110,11 +110,11 @@ No `.1password/environments.toml` file exists. The hook discovers and validates 
 
 ## Configuration
 
-Install the hook using the repo's [install script](../../README.md#installation); it copies the hook and configures the agent's config file when missing. Config location is agent-specific; see the [main README](../../README.md#supported-agents) for paths. You can scope config to project, user, or global; more specific levels take precedence.
+Install the hook using the repo's [install script](../../README.md#installation). It copies the hook and configures the agent's config file when missing. Config location is agent-specific.
 
 ### Example Configuration
 
-The command must run `run-hook.sh` with the hook name. The path to `run-hook.sh` is relative to the config file's directory (e.g. `1password-hooks/bin/run-hook.sh` for project scope). Example (e.g. Cursor — `.cursor/hooks.json`):
+The command must run `run-hook.sh` with the hook name. The path to `run-hook.sh` is relative to the config file's directory (e.g. `cursor-1password-hooks-bundle/bin/run-hook.sh` for project scope). Example (e.g. Cursor — `.cursor/hooks.json`):
 
 ```json
 {
@@ -122,7 +122,7 @@ The command must run `run-hook.sh` with the hook name. The path to `run-hook.sh`
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": "1password-hooks/bin/run-hook.sh 1password-validate-mounted-env-files"
+        "command": "cursor-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
       }
     ]
   }
