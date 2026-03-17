@@ -16,7 +16,7 @@
       },
       "project": {
         "install_dir": ".github/github-copilot-1password-hooks-bundle",
-        "config_path": ".github/hooks.json"
+        "config_path": ".github/hooks/hooks.json"
       }
     }
   }
