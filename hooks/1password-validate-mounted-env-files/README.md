@@ -1,18 +1,20 @@
-# Cursor Hook: Local .env File Validation for 1Password Environments
+# Hook: Local .env File Validation for 1Password Environments
 
-This directory includes a hook that validates locally mounted .env files from [1Password Environments](https://developer.1password.com/docs/environments) to make sure they're properly mounted. The hook automatically discovers configured .env files and prevents command execution in Cursor when required files are missing or invalid.
+This hook validates locally mounted .env files from [1Password Environments](https://developer.1password.com/docs/environments) to make sure they're properly mounted. It automatically discovers configured .env files and prevents command or tool execution when required files are missing or invalid. It works with supported agents and is invoked via `bin/run-hook.sh 1password-validate-mounted-env-files` (implementation is in [`hook.sh`](./hook.sh)).
 
 ## Details
 
 ### General Description
 
-Every time Cursor attempts to execute a shell command, the [`validate-mounted-env-files.sh`](./validate-mounted-env-files.sh) script will run and query 1Password for your configured [local .env files](https://developer.1password.com/docs/environments/local-env-file). It will then validate that each file is enabled, and exists as a valid FIFO (named pipe). When validation fails, the hook blocks command execution and provides clear error messages indicating which files are missing or need to be enabled from the 1Password app. The Cursor Agent will then guide you towards a proper configuration.
+When the agent runs the hook, it executes and queries 1Password for your configured [local .env files](https://developer.1password.com/docs/environments/local-env-file). It validates that each file is enabled and exists as a valid FIFO (named pipe). When validation fails, the hook blocks execution and provides clear error messages indicating which files are missing or need to be enabled from the 1Password app. The agent will then guide you towards a proper configuration.
 
-Note: [Local .env files](https://developer.1password.com/docs/environments/local-env-file) from 1Password Environments are only available on Mac and Linux. Windows is not yet supported. If you're on Windows, Cursor will automatically skip any validations.
+Note: [Local .env files](https://developer.1password.com/docs/environments/local-env-file) from 1Password Environments are only available on Mac and Linux. Windows is not yet supported. If you're on Windows, the hook will skip any validations.
 
-### Intended Cursor Event
+### Intended Events
 
-This hook is intended to be used with the **`beforeShellExecution`** event. When configured with this event, the hook runs before Cursor executes any commands, preventing the Agent from running when required environment files are not available.
+Use with the event that runs before shell command execution in your agent. When configured, the hook prevents the agent from proceeding when required environment files are not available.
+
+**Examples (event name depends on your agent):** `beforeShellExecution` (e.g. Cursor), `PreToolUse` (e.g. GitHub Copilot).
 
 ## Functionality
 
@@ -108,17 +110,11 @@ No `.1password/environments.toml` file exists. The hook discovers and validates 
 
 ## Configuration
 
-Hooks can be configured at multiple levels. To do this, add the hook file to the desired location and then configure it in the corresponding `hooks.json` file, and the behavior will become available:
-
-- **Project-specific**: `.cursor/hooks.json` in the project root (applies only to that project).
-- **User-specific**: `~/.cursor/hooks.json` or similar user configuration directory (applies to all projects for that user).
-- **Global/system-level**: System-wide configuration location (applies to all users on the system).
-
-Configuration at more specific levels (project) takes precedence over more general levels (user, global). [More information here](https://cursor.com/docs/agent/hooks#configuration).
+Install the hook using the repo's [install script](../../README.md#installation). It copies the hook and configures the agent's config file when missing. Config location is agent-specific.
 
 ### Example Configuration
 
-Add the following to `hooks.json` within your project:
+The command must run `run-hook.sh` with the hook name. The path to `run-hook.sh` is relative to the config file's directory (e.g. `cursor-1password-hooks-bundle/bin/run-hook.sh` for project scope). Example (e.g. Cursor — `.cursor/hooks.json`):
 
 ```json
 {
@@ -126,12 +122,14 @@ Add the following to `hooks.json` within your project:
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": ".cursor/hooks/1password/validate-mounted-env-files.sh"
+        "command": "cursor-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
       }
     ]
   }
 }
 ```
+
+For other agents, use the event and config path for your agent. See [.github/hooks/hooks.json](../../.github/hooks/hooks.json) in this repo for another example.
 
 ### Dependencies
 
@@ -153,25 +151,13 @@ The hook uses a "fail open" approach: if `sqlite3` is not available, the hook lo
 
 If the hook is not working as expected, there are several ways to gather more information about what's happening.
 
-### Cursor Execution Log
+### Agent Execution Log
 
-The easiest way to see if the hook is running and view its output is through Cursor's execution log:
-
-1. Open **Settings** > **Hooks** > **Execution Log**.
-2. Look for entries related to `beforeShellExecution` and `validate-mounted-env-files.sh`.
-3. Each entry shows whether the hook ran successfully, its output, and any error messages.
-
-This log helps you verify that:
-
-- The hook is being called by Cursor.
-- The hook is returning the expected permission decisions.
-- Any error messages from the hook execution.
+The easiest way to see if the hook is running is through your agent's execution or hooks log. Look for entries related to `run-hook.sh` or `1password-validate-mounted-env-files`. (For example, in Cursor: **Settings** > **Hooks** > **Execution Log**.) Each entry shows whether the hook ran successfully, its output, and any error messages.
 
 ### Manual Testing with Debug Mode
 
-You can manually run the hook in debug mode to see detailed logs directly in your terminal. This is useful for troubleshooting configuration issues or understanding the hook's behavior.
-
-The hook expects JSON input on stdin with the following format:
+You can run the hook manually via the runner to see output in your terminal. Run from the repo root (or use the installed path to `run-hook.sh`). The runner expects the agent's raw JSON on stdin (format may vary by agent). Example input (e.g. Cursor-style):
 
 ```json
 {
@@ -180,24 +166,17 @@ The hook expects JSON input on stdin with the following format:
 }
 ```
 
-Run the hook with `DEBUG=1` to output logs directly to the shell:
+Example command (repo root; use your installed path if you installed elsewhere):
 
 ```bash
-DEBUG=1 echo '{"command": "echo test", "workspace_roots": ["/path/to/project"]}' | ./.cursor/hooks/1password/validate-mounted-env-files.sh
+echo '{"command": "echo test", "workspace_roots": ["/path/to/project"]}' | ./bin/run-hook.sh 1password-validate-mounted-env-files
 ```
 
-The hook outputs JSON to stdout:
-
-```json
-{
-  "permission": "allow" | "deny",
-  "agent_message": "Message shown to agent (if denied)"
-}
-```
+With `DEBUG=1` in the environment, the hook may output extra logs. The runner outputs the agent's expected JSON to stdout (e.g. `{"permission": "allow"}` or `{"permission": "deny", "agent_message": "..."}`).
 
 ### Where to Find Logs
 
-When not running the script manually in debug mode, the hook logs information to `/tmp/1password-cursor-hooks.log` for troubleshooting. Check this file if you encounter issues.
+When not running the hook manually, it may log to `/tmp/1password-hooks.log` (or the path in `LOG_FILE` if set) for troubleshooting. Check that path or the agent's log directory if you encounter issues.
 
 Log entries include timestamps and detailed information about:
 

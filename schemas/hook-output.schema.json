@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/1Password/agent-hooks/schemas/hook-output.schema.json",
+  "title": "Canonical Hook Output",
+  "description": "Normalized JSON that hook scripts produce on stdout.",
+  "type": "object",
+  "required": ["decision", "message"],
+  "additionalProperties": false,
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["allow", "deny"],
+      "description": "The hook's verdict on whether the action should proceed."
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable explanation. Must be non-empty when decision is 'deny'. Should be empty string when decision is 'allow'."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "decision": { "const": "deny" } }
+      },
+      "then": {
+        "properties": {
+          "message": { "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "decision": { "const": "allow" } }
+      },
+      "then": {
+        "properties": {
+          "message": { "maxLength": 0 }
+        }
+      }
+    }
+  ]
+}
