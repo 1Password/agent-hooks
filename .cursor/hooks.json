@@ -3,7 +3,7 @@
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": ".cursor/hooks/1password/validate-mounted-env-files.sh"
+        "command": "bin/run-hook.sh 1password-validate-mounted-env-files"
       }
     ]
   }

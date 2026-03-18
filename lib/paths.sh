@@ -1,4 +1,4 @@
-# Shared path utilities for ide-hooks.
+# Shared path utilities for agent-hooks.
 # Source this file; it defines functions only and has no side effects.
 
 [[ -n "${_LIB_PATHS_LOADED:-}" ]] && return 0
