@@ -1,0 +1,22 @@
+{
+    "cursor": {
+      "adapters": ["_lib.sh", "cursor.sh", "generic.sh"],
+      "hook_events": {
+        "beforeShellExecution": ["1password-validate-mounted-env-files"]
+      },
+      "project": {
+        "install_dir": ".cursor/cursor-1password-hooks-bundle",
+        "config_path": ".cursor/hooks.json"
+      }
+    },
+    "github-copilot": {
+      "adapters": ["_lib.sh", "generic.sh", "github-copilot.sh"],
+      "hook_events": {
+        "PreToolUse": ["1password-validate-mounted-env-files"]
+      },
+      "project": {
+        "install_dir": ".github/github-copilot-1password-hooks-bundle",
+        "config_path": ".github/hooks/hooks.json"
+      }
+    }
+  }
