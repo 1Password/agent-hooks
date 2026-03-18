@@ -155,7 +155,7 @@ fi
 
 # Ensure the config file exists
 if [[ ! -f "$CONFIG_PATH" ]]; then
-  echo "Error: config not found: $CONFIG_PATH"
+  echo "Error: config not found: $CONFIG_PATH" >&2
   exit 1
 fi
 
@@ -163,14 +163,14 @@ fi
 CONFIG_CONTENT=$(cat "$CONFIG_PATH")
 AGENT_BLOCK=$(get_json_block "$CONFIG_CONTENT" "$AGENT") || true
 if [[ -z "$AGENT_BLOCK" ]]; then
-  echo "Error: could not find agent block for: $AGENT"
+  echo "Error: could not find agent block for: $AGENT" >&2
   exit 1
 fi
 
 # Get the project block used for the install directory and config path
 SCOPE_BLOCK=$(get_json_block "$AGENT_BLOCK" "project") || true
 if [[ -z "$SCOPE_BLOCK" ]]; then
-  echo "Error: could not find project block for: $AGENT"
+  echo "Error: could not find project block for: $AGENT" >&2
   exit 1
 fi
 
@@ -178,7 +178,7 @@ fi
 INSTALL_DIR_REL=$(get_string_key "$SCOPE_BLOCK" "install_dir") || true
 CONFIG_PATH_REL=$(get_string_key "$SCOPE_BLOCK" "config_path") || true
 if [[ -z "$INSTALL_DIR_REL" || -z "$CONFIG_PATH_REL" ]]; then
-  echo "Error: missing install_dir or config_path for agent=$AGENT"
+  echo "Error: missing install_dir or config_path for agent=$AGENT" >&2
   exit 1
 fi
 
@@ -197,7 +197,7 @@ fi
 BUNDLE_NAME="${INSTALL_DIR_REL##*/}"
 if [[ -n "${TARGET_DIR:-}" ]]; then
   if [[ ! -d "$TARGET_DIR" ]]; then
-    echo "Error: target directory does not exist: $TARGET_DIR"
+    echo "Error: target directory does not exist: $TARGET_DIR" >&2
     exit 1
   fi
   BASE="$(cd "$TARGET_DIR" && pwd)"
@@ -225,6 +225,7 @@ if [[ -d "$INSTALL_DIR" ]] && [[ -t 0 ]]; then
     [yY]|[yY][eE][sS]) ;;
     *) echo "Aborted."; exit 0 ;;
   esac
+  rm -rf "$INSTALL_DIR"
 fi
 
 mkdir -p "${INSTALL_DIR}/bin" "${INSTALL_DIR}/lib" "${INSTALL_DIR}/adapters" "${INSTALL_DIR}/hooks"

@@ -48,6 +48,13 @@ T="$BATS_TEST_TMPDIR"
 
 # ---- Cursor: install paths ----
 
+@test "cursor: hooks.json command path is rewritten to bundle-relative path" {
+  run bash "${INSTALL_SCRIPT}" --agent cursor --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  run grep -Fq '.cursor/cursor-1password-hooks-bundle/bin/run-hook.sh' "${T}/.cursor/hooks.json"
+  [[ $status -eq 0 ]]
+}
+
 @test "cursor: --target-dir creates .cursor/cursor-1password-hooks-bundle and expected files" {
   run bash "${INSTALL_SCRIPT}" --agent cursor --target-dir "${T}"
   [[ $status -eq 0 ]]
@@ -119,6 +126,13 @@ EOF
   [[ -f "${T}/.github/github-copilot-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
   [[ -f "${T}/.github/hooks/hooks.json" ]]
   [[ "$output" == *"Done. Hook(s) installed"* ]]
+}
+
+@test "github-copilot: hooks.json command path is rewritten to bundle-relative path" {
+  run bash "${INSTALL_SCRIPT}" --agent github-copilot --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  run grep -Fq '.github/github-copilot-1password-hooks-bundle/bin/run-hook.sh' "${T}/.github/hooks/hooks.json"
+  [[ $status -eq 0 ]]
 }
 
 @test "github-copilot: does not overwrite existing hooks.json" {
