@@ -12,7 +12,7 @@ Note: [Local .env files](https://developer.1password.com/docs/environments/local
 
 ### Intended Events
 
-Use with the event that runs before shell or tool execution in your agent. When configured, the hook prevents the agent from proceeding when required environment files are not available.
+Use with the event that runs before shell command execution in your agent. When configured, the hook prevents the agent from proceeding when required environment files are not available.
 
 **Examples (event name depends on your agent):** `beforeShellExecution` (e.g. Cursor), `PreToolUse` (e.g. GitHub Copilot).
 

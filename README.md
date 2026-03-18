@@ -24,7 +24,9 @@ Use the `--agent` value when running the install script:
 
 ## Available Hooks
 
-- [`1password-validate-mounted-env-files`](./hooks/1password-validate-mounted-env-files/README.md) - Mounted .env file Validation
+| Hook | Installation |
+|------|--------------|
+| [`1password-validate-mounted-env-files`](./hooks/1password-validate-mounted-env-files/README.md) — validates mounted `.env` files from 1Password Environments | <ul><li><strong>Cursor:</strong> <a href="https://cursor.com/marketplace/1password">1Password plugin</a> (e.g. <code>/add-plugin 1password</code>); or <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent cursor</code>).</li><li><strong>GitHub Copilot:</strong> <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent github-copilot</code>).</li></ul> |
 
 ## Installation
 
