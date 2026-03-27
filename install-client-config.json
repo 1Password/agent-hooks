@@ -18,5 +18,15 @@
         "install_dir": ".github/github-copilot-1password-hooks-bundle",
         "config_path": ".github/hooks/hooks.json"
       }
+    },
+    "windsurf": {
+      "adapters": ["_lib.sh", "windsurf.sh", "generic.sh"],
+      "hook_events": {
+        "pre_run_command": ["1password-validate-mounted-env-files"]
+      },
+      "project": {
+        "install_dir": ".windsurf/windsurf-1password-hooks-bundle",
+        "config_path": ".windsurf/hooks.json"
+      }
     }
   }

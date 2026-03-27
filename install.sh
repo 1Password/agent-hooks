@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Install agent hooks for Cursor or GitHub Copilot.
+# Install agent hooks for Cursor, GitHub Copilot, or Windsurf.
 # Always creates a bundle (hook files). With --target-dir, installs that bundle into DIR and creates hooks.json from template if missing (never overwrites existing hooks.json).
 # Run from this repo.
 #
-# Usage: ./install.sh --agent cursor|github-copilot [--target-dir DIR]
+# Usage: ./install.sh --agent cursor|github-copilot|windsurf [--target-dir DIR]
 #
 set -euo pipefail
 
@@ -17,9 +17,9 @@ fi
 CONFIG_PATH="${REPO_ROOT}/${CONFIG_NAME}"
 
 usage() {
-  echo "Usage: $0 --agent cursor|github-copilot [--target-dir DIR]"
+  echo "Usage: $0 --agent cursor|github-copilot|windsurf [--target-dir DIR]"
   echo ""
-  echo "  --agent      (required) Agent (cursor or github-copilot)."
+  echo "  --agent      (required) Agent (cursor, github-copilot, or windsurf)."
   echo "  --target-dir If set: install bundle into DIR (creates hooks.json from template if missing). If unset: create bundle in current directory only (no hooks.json)."
   echo ""
   exit 1
@@ -125,7 +125,7 @@ TARGET_DIR=""
 require_value() {
   local opt="$1"
   if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
-    echo "Error: $opt requires a value (e.g. for --agent: cursor, github-copilot)" >&2
+    echo "Error: $opt requires a value (e.g. for --agent: cursor, github-copilot, windsurf)" >&2
     exit 1
   fi
 }
@@ -149,7 +149,7 @@ done
 
 # Ensure an agent is specified
 if [[ -z "$AGENT" ]]; then
-  echo "Error: --agent is required (cursor or github-copilot)" >&2
+  echo "Error: --agent is required (cursor, github-copilot, or windsurf)" >&2
   usage
 fi
 
