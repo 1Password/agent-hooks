@@ -5,7 +5,6 @@ load "../test_helper"
 HOOK_SCRIPT="${PROJECT_ROOT}/hooks/1password-validate-mounted-env-files/hook.sh"
 
 canonical_empty_roots='{"client":"cursor","event":"before_shell_execution","type":"command","workspace_roots":[],"cwd":"","command":"echo hi","raw_payload":{}}'
-canonical_one_root='{"client":"cursor","event":"before_shell_execution","type":"command","workspace_roots":["/tmp"],"cwd":"/tmp","command":"echo hi","raw_payload":{}}'
 
 
 @test "hook outputs exactly one line" {
@@ -22,10 +21,25 @@ canonical_one_root='{"client":"cursor","event":"before_shell_execution","type":"
 }
 
 @test "deny output has non-empty message" {
-    run bash -c "echo '$canonical_one_root' | bash \"${HOOK_SCRIPT}\""
-    if [[ $status -eq 1 ]]; then
-        [[ $(echo "$output" | grep -oE '"message"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*: *"\(.*\)".*/\1/') != "" ]]
-    fi
+    local ws="${BATS_TEST_TMPDIR}/workspace"
+    mkdir -p "$ws/.1password"
+    printf '%s\n' 'mount_paths = [".env.missing"]' > "$ws/.1password/environments.toml"
+
+    local payload
+    payload=$(python3 -c "import json,sys; print(json.dumps({
+        'client': 'cursor',
+        'event': 'before_shell_execution',
+        'type': 'command',
+        'workspace_roots': [sys.argv[1]],
+        'cwd': sys.argv[1],
+        'command': 'echo hi',
+        'raw_payload': {},
+    }))" "$ws")
+
+    run bash "$HOOK_SCRIPT" <<<"$payload"
+    [[ $status -eq 1 ]]
+    msg=$(printf '%s' "$output" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("message",""))')
+    [[ -n "$msg" ]]
 }
 
 @test "hook produces no extra lines or stderr" {
