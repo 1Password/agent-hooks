@@ -38,8 +38,8 @@ detect_client() {
         return 0
     fi
 
-    # 2. Windsurf (Cascade) — every hook payload includes `agent_action_name`
-    #    (e.g. pre_run_command). Checked before Copilot so we do not confuse
+    # 2. Windsurf (Cascade) — every hook payload includes `agent_action_name`.
+    #    Checked before Copilot so we do not confuse
     #    Cascade with other clients that may add `hook_event_name` later.
     if json_has_key "$raw_payload" "agent_action_name"; then
         echo "windsurf"
