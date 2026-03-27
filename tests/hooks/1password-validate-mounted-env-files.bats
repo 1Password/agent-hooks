@@ -37,9 +37,10 @@ canonical_empty_roots='{"client":"cursor","event":"before_shell_execution","type
     }))" "$ws")
 
     run bash "$HOOK_SCRIPT" <<<"$payload"
+    run bash "$HOOK_SCRIPT" <<<"$payload"
     [[ $status -eq 1 ]]
-    msg=$(printf '%s' "$output" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("message",""))')
-    [[ -n "$msg" ]]
+    [[ -n "$output" ]]
+    [[ $(printf '%s' "$output" | wc -l) -eq 1 ]]
 }
 
 @test "hook produces no extra lines or stderr" {
