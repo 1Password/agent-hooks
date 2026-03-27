@@ -119,7 +119,10 @@ setup() {
     local json='{"workspace_roots": ["/project-a", "/project-b"]}'
     run parse_json_workspace_roots "$json"
     local -a lines
-    mapfile -t lines <<< "$output"
+    local -a lines=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        lines+=("$line")
+    done <<< "$output"
     [[ "${lines[0]}" == "/project-a" ]]
     [[ "${lines[1]}" == "/project-b" ]]
 }
@@ -133,7 +136,10 @@ setup() {
 }'
     run parse_json_workspace_roots "$json"
     local -a lines
-    mapfile -t lines <<< "$output"
+    local -a lines=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        lines+=("$line")
+    done <<< "$output"
     [[ "${lines[0]}" == "/project-a" ]]
     [[ "${lines[1]}" == "/project-b" ]]
 }

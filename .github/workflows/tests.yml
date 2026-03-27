@@ -22,7 +22,7 @@ jobs:
 
       - name: Install bats (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y bats
+        run: sudo apt-get update && sudo apt-get install -y bats sqlite3
 
       - name: Run bats tests
         run: bats -r tests/
