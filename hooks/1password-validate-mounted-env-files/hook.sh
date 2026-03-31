@@ -260,7 +260,17 @@ has_toml_mount_paths_field() {
     return 1
 }
 
-# Parse TOML file and extract mount paths from top-level mount_paths field
+# Extract quoted strings (double or single) from TOML array content.
+# Outputs each extracted value on its own line.
+# Usage: extract_toml_array_items "array_content_string"
+extract_toml_array_items() {
+    local content="$1"
+    # Match both double-quoted and single-quoted strings using grep + sed
+    # This handles: "value", 'value', and mixed arrays
+    echo "$content" | grep -oE '"[^"]+"|'"'"'[^'"'"']+'"'" | sed 's/^["'"'"']//;s/["'"'"']$//' || true
+}
+
+# Parse TOML file and extract mount paths from top-level mount_paths field 
 # Returns newline-separated list of mount paths
 # Returns empty string (but exit code 0) if mount_paths = []
 # Returns exit code 1 if mount_paths field doesn't exist
@@ -274,9 +284,10 @@ parse_toml_mount_paths() {
     # Pure bash TOML parsing for environments entries
     # Handles formats like:
     #   mount_paths = [".env", "billing.env"]
+    #   mount_paths = ['.env', 'billing.env']
     #   mount_paths = [
     #     ".env",
-    #     "billing.env"
+    #     'billing.env'
     #   ]
     #   mount_paths = []
     local in_mount_paths_array=false
@@ -305,13 +316,7 @@ parse_toml_mount_paths() {
             array_content="$array_part"
             in_mount_paths_array=false  # Array is complete on one line
 
-            # Extract quoted strings from the array content
-            while [[ "$array_content" =~ \"([^\"]+)\" ]]; do
-                mount_paths="${mount_paths}${BASH_REMATCH[1]}"$'\n'
-                # Remove the matched string and any following comma/whitespace
-                array_content="${array_content#*\"${BASH_REMATCH[1]}\"}"
-                array_content=$(echo "$array_content" | sed 's/^[[:space:]]*,[[:space:]]*//;s/^[[:space:]]*//')
-            done
+            mount_paths="$(extract_toml_array_items "$array_content")"
         # Check for mount_paths = [ (multi-line array start)
         elif [[ "$line" =~ ^mount_paths[[:space:]]*=[[:space:]]*\[ ]]; then
             found_mount_paths_field=true
@@ -322,11 +327,7 @@ parse_toml_mount_paths() {
             # If array closes on same line, process it
             if [[ "$array_content" =~ \] ]]; then
                 array_content="${array_content%\]*}"
-                while [[ "$array_content" =~ \"([^\"]+)\" ]]; do
-                    mount_paths="${mount_paths}${BASH_REMATCH[1]}"$'\n'
-                    array_content="${array_content#*\"${BASH_REMATCH[1]}\"}"
-                    array_content=$(echo "$array_content" | sed 's/^[[:space:]]*,[[:space:]]*//;s/^[[:space:]]*//')
-                done
+                mount_paths="$(extract_toml_array_items "$array_content")"
                 in_mount_paths_array=false
                 array_content=""
             fi
@@ -338,11 +339,7 @@ parse_toml_mount_paths() {
                 local line_content="${line%\]*}"
                 array_content="${array_content} ${line_content}"
                 # Process the complete array content
-                while [[ "$array_content" =~ \"([^\"]+)\" ]]; do
-                    mount_paths="${mount_paths}${BASH_REMATCH[1]}"$'\n'
-                    array_content="${array_content#*\"${BASH_REMATCH[1]}\"}"
-                    array_content=$(echo "$array_content" | sed 's/^[[:space:]]*,[[:space:]]*//;s/^[[:space:]]*//')
-                done
+                mount_paths="$(extract_toml_array_items "$array_content")"
                 in_mount_paths_array=false
                 array_content=""
             else

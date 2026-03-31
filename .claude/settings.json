@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bin/run-hook.sh 1password-validate-mounted-env-files"
+          }
+        ]
+      }
+    ]
+  }
+}

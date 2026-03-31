@@ -19,6 +19,16 @@
         "config_path": ".github/hooks/hooks.json"
       }
     },
+    "claude-code": {
+      "adapters": ["_lib.sh", "claude-code.sh", "generic.sh"],
+      "hook_events": {
+        "PreToolUse": ["1password-validate-mounted-env-files"]
+      },
+      "project": {
+        "install_dir": ".claude/claude-code-1password-hooks-bundle",
+        "config_path": ".claude/settings.json"
+      }
+    },
     "windsurf": {
       "adapters": ["_lib.sh", "windsurf.sh", "generic.sh"],
       "hook_events": {
