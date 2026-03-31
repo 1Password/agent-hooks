@@ -25,8 +25,6 @@ source "${_ADAPTERS_DIR}/../lib/json.sh"
 #
 # Future clients (not yet implemented):
 #   Windsurf:       `agent_action_name` payload field (unique)
-#   Claude Code:    CLAUDE_PROJECT_DIR env var (after ruling out Cursor);
-#                   `permission_mode` payload field (unique)
 #
 # Usage: detected=$(detect_client "$raw_payload")
 detect_client() {
@@ -39,7 +37,15 @@ detect_client() {
         return 0
     fi
 
-    # 2. GitHub Copilot (VS Code) — shares `hook_event_name` with Cursor.
+    # 2. Claude Code — CLAUDE_PROJECT_DIR env var is set by Claude Code.
+    #    Cursor also sets it as a compatibility alias, but Cursor is already
+    #    ruled out above. `permission_mode` payload field is unique to Claude Code.
+    if [[ -n "${CLAUDE_PROJECT_DIR:-}" ]] || json_has_key "$raw_payload" "permission_mode"; then
+        echo "claude-code"
+        return 0
+    fi
+
+    # 3. GitHub Copilot (VS Code) — shares `hook_event_name` with Cursor.
     #    By this point Cursor is already ruled out, so the presence of
     #    hook_event_name means Copilot.
     if json_has_key "$raw_payload" "hook_event_name"; then
