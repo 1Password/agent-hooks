@@ -39,6 +39,39 @@ setup() {
     [[ "$output" == "github-copilot" ]]
 }
 
+# ========== Claude Code detection ==========
+
+@test "detect_client returns claude-code when CLAUDE_PROJECT_DIR is set" {
+    CLAUDE_PROJECT_DIR="/tmp" run detect_client '{"hook_event_name": "PreToolUse", "tool_name": "Bash"}'
+    [[ "$output" == "claude-code" ]]
+}
+
+@test "detect_client returns claude-code when payload has permission_mode" {
+    run detect_client '{"hook_event_name": "PreToolUse", "tool_name": "Bash", "permission_mode": "default"}'
+    [[ "$output" == "claude-code" ]]
+}
+
+@test "detect_client returns cursor over claude-code when CURSOR_VERSION is set" {
+    CURSOR_VERSION="1.7.2" CLAUDE_PROJECT_DIR="/tmp" run detect_client '{"cursor_version": "1.7.2", "permission_mode": "default"}'
+    [[ "$output" == "cursor" ]]
+}
+
+# ========== Windsurf detection ==========
+
+@test "detect_client returns windsurf when payload has agent_action_name" {
+    run detect_client '{"agent_action_name":"pre_run_command","tool_info":{"command_line":"ls","cwd":"/tmp"}}'
+    [[ "$output" == "windsurf" ]]
+}
+
+@test "detect_client prefers cursor over agent_action_name when cursor_version present" {
+    run detect_client '{"cursor_version":"1.0.0","agent_action_name":"pre_run_command","tool_info":{"command_line":"ls","cwd":"/tmp"}}'
+    [[ "$output" == "cursor" ]]
+}
+
+@test "detect_client prefers windsurf over github-copilot when both hook_event_name and agent_action_name present" {
+    run detect_client '{"agent_action_name":"pre_run_command","hook_event_name":"PreToolUse","tool_info":{"command_line":"ls","cwd":"/tmp"}}'
+    [[ "$output" == "windsurf" ]]
+}
 # ========== Unknown / fallback ==========
 
 @test "detect_client returns unknown for empty object" {

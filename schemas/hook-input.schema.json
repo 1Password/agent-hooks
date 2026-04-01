@@ -9,7 +9,7 @@
   "properties": {
     "client": {
       "type": "string",
-      "enum": ["cursor", "windsurf", "claude", "github-copilot", "unknown"],
+      "enum": ["cursor", "windsurf", "claude-code", "github-copilot", "unknown"],
       "description": "Identifier of the calling agentic client."
     },
     "event": {

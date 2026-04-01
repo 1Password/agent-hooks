@@ -144,6 +144,78 @@ EOF
   [[ "$(cat "${T}/.github/hooks/hooks.json")" == '{"version":1,"hooks":{"PreToolUse":[]}}' ]]
 }
 
+# ---- Windsurf: install paths ----
+
+@test "windsurf: --target-dir creates .windsurf/windsurf-1password-hooks-bundle and expected files" {
+  run bash "${INSTALL_SCRIPT}" --agent windsurf --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  [[ -f "${T}/.windsurf/windsurf-1password-hooks-bundle/bin/run-hook.sh" ]]
+  [[ -d "${T}/.windsurf/windsurf-1password-hooks-bundle/lib" ]]
+  [[ -f "${T}/.windsurf/windsurf-1password-hooks-bundle/adapters/_lib.sh" ]]
+  [[ -f "${T}/.windsurf/windsurf-1password-hooks-bundle/adapters/windsurf.sh" ]]
+  [[ -f "${T}/.windsurf/windsurf-1password-hooks-bundle/adapters/generic.sh" ]]
+  [[ ! -f "${T}/.windsurf/windsurf-1password-hooks-bundle/adapters/cursor.sh" ]]
+  [[ -f "${T}/.windsurf/windsurf-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
+  [[ -f "${T}/.windsurf/hooks.json" ]]
+  [[ "$output" == *"Done. Hook(s) installed"* ]]
+}
+
+@test "windsurf: hooks.json command path is rewritten to bundle-relative path" {
+  run bash "${INSTALL_SCRIPT}" --agent windsurf --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  run grep -Fq '.windsurf/windsurf-1password-hooks-bundle/bin/run-hook.sh' "${T}/.windsurf/hooks.json"
+  [[ $status -eq 0 ]]
+}
+
+@test "windsurf: does not overwrite existing hooks.json" {
+  mkdir -p "${T}/.windsurf"
+  echo '{"hooks":{"pre_run_command":[]}}' > "${T}/.windsurf/hooks.json"
+  run bash "${INSTALL_SCRIPT}" --agent windsurf --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  [[ "$output" == *"Config already exists at"* ]]
+  [[ "$(cat "${T}/.windsurf/hooks.json")" == '{"hooks":{"pre_run_command":[]}}' ]]
+}
+
+# ---- Claude Code: install paths ----
+
+@test "claude-code: --target-dir creates .claude/claude-code-1password-hooks-bundle and expected files" {
+  run bash "${INSTALL_SCRIPT}" --agent claude-code --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  [[ -f "${T}/.claude/claude-code-1password-hooks-bundle/bin/run-hook.sh" ]]
+  [[ -d "${T}/.claude/claude-code-1password-hooks-bundle/lib" ]]
+  [[ -f "${T}/.claude/claude-code-1password-hooks-bundle/adapters/_lib.sh" ]]
+  [[ -f "${T}/.claude/claude-code-1password-hooks-bundle/adapters/claude-code.sh" ]]
+  [[ -f "${T}/.claude/claude-code-1password-hooks-bundle/adapters/generic.sh" ]]
+  [[ ! -f "${T}/.claude/claude-code-1password-hooks-bundle/adapters/cursor.sh" ]]
+  [[ -f "${T}/.claude/claude-code-1password-hooks-bundle/hooks/1password-validate-mounted-env-files/hook.sh" ]]
+  [[ -f "${T}/.claude/settings.json" ]]
+  [[ "$output" == *"Done. Hook(s) installed"* ]]
+}
+
+@test "claude-code: settings.json command path is rewritten to bundle-relative path" {
+  run bash "${INSTALL_SCRIPT}" --agent claude-code --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  run grep -Fq '.claude/claude-code-1password-hooks-bundle/bin/run-hook.sh' "${T}/.claude/settings.json"
+  [[ $status -eq 0 ]]
+}
+
+@test "claude-code: does not overwrite existing settings.json" {
+  mkdir -p "${T}/.claude"
+  echo '{"hooks":{"PreToolUse":[]}}' > "${T}/.claude/settings.json"
+  run bash "${INSTALL_SCRIPT}" --agent claude-code --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  [[ "$output" == *"Config already exists at"* ]]
+  [[ "$(cat "${T}/.claude/settings.json")" == '{"hooks":{"PreToolUse":[]}}' ]]
+}
+
+@test "claude-code: installed run-hook.sh runs (smoke)" {
+  run bash "${INSTALL_SCRIPT}" --agent claude-code --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  run bash -c "echo '{}' | ${T}/.claude/claude-code-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
+  [[ $status -eq 0 ]]
+}
+
+
 # ---- Smoke: installed run-hook.sh is runnable ----
 
 @test "cursor: installed run-hook.sh runs (smoke)" {
@@ -157,5 +229,12 @@ EOF
   run bash "${INSTALL_SCRIPT}" --agent github-copilot --target-dir "${T}"
   [[ $status -eq 0 ]]
   run bash -c "echo '{}' | ${T}/.github/github-copilot-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
+  [[ $status -eq 0 ]]
+}
+
+@test "windsurf: installed run-hook.sh runs (smoke)" {
+  run bash "${INSTALL_SCRIPT}" --agent windsurf --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  run bash -c "echo '{}' | ${T}/.windsurf/windsurf-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
   [[ $status -eq 0 ]]
 }

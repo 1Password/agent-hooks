@@ -8,7 +8,7 @@ This repository provides 1Password agent hooks that run inside supported IDEs an
 
 Configuration is agent-specific and may use config files or editor settings. Scope depends on the agent:
 
-- **Project-specific**: e.g. `.cursor/hooks.json` or `.github/hooks/hooks.json` in the project root (applies only to that project)
+- **Project-specific**: e.g. `.cursor/hooks.json`, `.github/hooks/hooks.json`, `.claude/settings.json`, or `.windsurf/hooks.json` in the project root (applies only to that project)
 
 Other levels (user-specific or global) may be supported by some agents. See each agent’s documentation for details. The table below in **Supported Agents** references documentation.
 
@@ -19,14 +19,16 @@ Use the `--agent` value when running the install script:
 | Agent | `--agent` value | Docs |
 |-------|-----------------|------|
 | **Cursor** | `cursor` | [Cursor Hooks](https://cursor.com/docs/agent/hooks) |
+| **Claude Code** | `claude-code` | [Claude Code Hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) |
 | **GitHub Copilot** | `github-copilot` | [Custom agents configuration](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/use-hooks) |
+| **Windsurf (Cascade)** | `windsurf` | [Cascade Hooks](https://docs.windsurf.com/windsurf/cascade/hooks) |
 
 
 ## Available Hooks
 
 | Hook | Installation |
 |------|--------------|
-| [`1password-validate-mounted-env-files`](./hooks/1password-validate-mounted-env-files/README.md) — validates mounted `.env` files from 1Password Environments | <ul><li><strong>Cursor:</strong> <a href="https://cursor.com/marketplace/1password">1Password plugin</a> (e.g. <code>/add-plugin 1password</code>); or <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent cursor</code>).</li><li><strong>GitHub Copilot:</strong> <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent github-copilot</code>).</li></ul> |
+| [`1password-validate-mounted-env-files`](./hooks/1password-validate-mounted-env-files/README.md) — validates mounted `.env` files from 1Password Environments | <ul><li><strong>Cursor:</strong> <a href="https://cursor.com/marketplace/1password">1Password plugin</a> (e.g. <code>/add-plugin 1password</code>); or <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent cursor</code>).</li><li><strong>Claude Code:</strong> <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent claude-code</code>).</li><li><strong>GitHub Copilot:</strong> <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent github-copilot</code>).</li><li><strong>Windsurf (Cascade):</strong> <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent windsurf</code>).</li></ul> |
 
 ## Installation
 
@@ -52,11 +54,17 @@ Create a portable bundle in the current directory (no config file). Move the fol
 # Cursor: creates cursor-1password-hooks-bundle/ in cwd
 ./install.sh --agent cursor
 
+# Claude Code: creates claude-code-1password-hooks-bundle/ in cwd
+./install.sh --agent claude-code
+
 # GitHub Copilot: creates github-copilot-1password-hooks-bundle/ in cwd
 ./install.sh --agent github-copilot
+
+# Windsurf (Cascade): creates windsurf-1password-hooks-bundle/ in cwd
+./install.sh --agent windsurf
 ```
 
-Then move that folder into the project’s directory for your agent (e.g. .cursor/ or .github/)."
+Then move that folder into the project’s directory for your agent (e.g. `.cursor/`, `.github/`, or `.windsurf/`).
 
 ⚠️ When you use Bundle, the script does not create a config file(`hooks.json`). You'll need to add or update manually. See the [**Config File**](#config-file) section below.
 
@@ -74,8 +82,14 @@ Install the bundle into a target directory (e.g. a project repo). The script cre
 # Cursor: installs into repo/.cursor/cursor-1password-hooks-bundle and repo/.cursor/hooks.json
 ./install.sh --agent cursor --target-dir /path/to/your/repo
 
+# Claude Code: installs into repo/.claude/claude-code-1password-hooks-bundle and repo/.claude/settings.json
+./install.sh --agent claude-code --target-dir /path/to/your/repo
+
 # GitHub Copilot: installs into repo/.github/github-copilot-1password-hooks-bundle and repo/.github/hooks/hooks.json
 ./install.sh --agent github-copilot --target-dir /path/to/your/repo
+
+# Windsurf (Cascade): installs into repo/.windsurf/windsurf-1password-hooks-bundle and repo/.windsurf/hooks.json
+./install.sh --agent windsurf --target-dir /path/to/your/repo
 ```
 
 If the install directory already exists, the script will ask before overwriting. Type `y` to continue or `n` to cancel.
@@ -88,15 +102,17 @@ For **Bundle**, the script does not create a config file. When you use **Bundle 
 
 **What to do:**
 
-- **Bundle** — The script didn’t create a config file. Create it at your agent’s path (e.g. `.cursor/hooks.json` or `.github/hooks/hooks.json`), then add hook entries as in the examples below.
+- **Bundle** — The script didn’t create a config file. Create it at your agent’s path (e.g. `.cursor/hooks.json`, `.claude/settings.json`, `.github/hooks/hooks.json`, or `.windsurf/hooks.json`), then add hook entries as in the examples below.
 - **Bundle and Move** — The script did not create the config because it already existed at the target directory. Open it at the path the script printed and add or update hook entries as below.
 
 **Steps (both):**
 
-1. Open (or create) the config file at your agent’s path (e.g `.cursor/hooks.json` or `.github/hooks/hooks.json`).
+1. Open (or create) the config file at your agent’s path (e.g `.cursor/hooks.json`, `.claude/settings.json`, `.github/hooks/hooks.json`, or `.windsurf/hooks.json`).
 2. Add or update hook entries so they run `<bundle-name>/bin/run-hook.sh <hook-name>` for the events you want. The path is relative to the config file’s directory.
 
-**Example of config file** - `.cursor/hooks.json`:
+**Example config files:**
+
+Cursor — `.cursor/hooks.json`:
 
 ```json
 {
@@ -104,18 +120,30 @@ For **Bundle**, the script does not create a config file. When you use **Bundle 
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": "bin/run-hook.sh 1password-validate-mounted-env-files"
+        "command": "cursor-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
       }
     ]
   }
 }
 ```
 
-**Example of adding entry to your config file** — add this object to the `beforeShellExecution` array in `.cursor/hooks.json`:
+Claude Code — `.claude/settings.json`:
 
 ```json
 {
-  "command": "cursor-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-code-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
