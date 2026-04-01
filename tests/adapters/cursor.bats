@@ -65,8 +65,10 @@ CURSOR_PAYLOAD='{"command": "npm run build", "workspace_roots": ["/Users/alice/p
     result=$(normalize_input "$payload")
     local roots
     roots=$(parse_json_workspace_roots "$result")
-    local -a lines
-    mapfile -t lines <<< "$roots"
+    local -a lines=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        lines+=("$line")
+    done <<< "$roots"
     [[ "${lines[0]}" == "/project-a" ]]
     [[ "${lines[1]}" == "/project-b" ]]
 }
