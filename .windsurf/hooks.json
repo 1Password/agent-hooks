@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "pre_run_command": [
+      {
+        "command": "bin/run-hook.sh 1password-validate-mounted-env-files",
+        "show_output": true
+      }
+    ]
+  }
+}
