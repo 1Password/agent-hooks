@@ -213,3 +213,69 @@ TOML
     assert_lines ".env"
 }
 
+# ============================================================================
+# Fail-open regression tests for `set -e` aborts on the 1Password DB lookup
+# ============================================================================
+#
+# find_1password_db and query_mounts use a non-zero return as a normal
+# "not found / unavailable" signal. Under `set -euo pipefail`, a non-zero
+# command substitution in an assignment aborts the script before the
+# fail-open logic runs — so the hook would exit 1 with empty stdout instead
+# of allowing. These two tests pin the intended fail-open behavior and run
+# without sqlite3 (the exact path the prior `deny` test skips).
+
+# Build a canonical-input payload for one workspace root.
+_canonical_for_root() {
+    python3 -c "import json,sys; print(json.dumps({
+        'client': 'cursor',
+        'event': 'before_shell_execution',
+        'type': 'command',
+        'workspace_roots': [sys.argv[1]],
+        'cwd': sys.argv[1],
+        'command': 'echo hi',
+        'raw_payload': {},
+    }))" "$1"
+}
+
+@test "fails open (allow) when no 1Password database is present" {
+    # Regression for line ~415: db_path=$(find_1password_db ...) returns
+    # non-zero when no database exists on disk.
+    local home="${BATS_TEST_TMPDIR}/home"
+    mkdir -p "$home"   # intentionally no 1Password sqlite database
+
+    local ws="${BATS_TEST_TMPDIR}/workspace"
+    mkdir -p "$ws"     # no .1password/environments.toml -> default mode
+
+    run env HOME="$home" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
+
+    [[ $status -eq 0 ]]
+    [[ "$output" == '{"decision":"allow","message":""}' ]]
+}
+
+@test "fails open (allow) when the 1Password database cannot be queried" {
+    # Regression for line ~417: mount_hex_data=$(query_mounts ...) returns
+    # non-zero when sqlite3 is missing or the database is invalid/unreadable.
+    # A present-but-invalid db file reaches query_mounts and forces the
+    # non-zero path regardless of whether sqlite3 is installed.
+    local home="${BATS_TEST_TMPDIR}/home"
+    local db_dir
+    case "$(uname -s)" in
+        Darwin*)
+            db_dir="${home}/Library/Group Containers/2BUA8C4S2C.com.1password/Library/Application Support/1Password/Data"
+            ;;
+        *)
+            db_dir="${home}/.config/1Password"
+            ;;
+    esac
+    mkdir -p "$db_dir"
+    printf 'not-a-valid-sqlite-database' > "${db_dir}/1Password.sqlite"
+
+    local ws="${BATS_TEST_TMPDIR}/workspace"
+    mkdir -p "$ws"
+
+    run env HOME="$home" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
+
+    [[ $status -eq 0 ]]
+    [[ "$output" == '{"decision":"allow","message":""}' ]]
+}
+
