@@ -59,6 +59,17 @@ get_telemetry_dir() {
     echo "${HOME}/.config/1Password/data/hook-events"
 }
 
+# Emit the `,"ts":<epoch_ms>` JSON fragment stamping when the event was
+# produced, or an empty string if the clock is unreadable. Guarded so a non-numeric clock never yields a malformed
+# line.
+ts_json_fragment() {
+    local ts
+    ts=$(current_time_ms)
+    if [[ "$ts" =~ ^[0-9]+$ ]]; then
+        printf ',"ts":%s' "$ts"
+    fi
+}
+
 # Check whether the 1Password app has signaled that telemetry is enabled.
 # Returns 0 (true) if the signal file exists, 1 (false) otherwise.
 telemetry_consent_enabled() {
@@ -66,7 +77,7 @@ telemetry_consent_enabled() {
 }
 
 # Append a single JSON line to the events.jsonl file.
-# Checks consent and enforces a 1MB file size cap.
+# Checks consent and enforces a 1MB file size cap (drop-newest).
 write_telemetry_event() {
     local json_line="$1"
     local event_dir
@@ -143,8 +154,11 @@ write_execution_event() {
     local duration_bucket
     duration_bucket=$(bucket_duration_ms "$duration_ms")
 
+    local ts_field
+    ts_field=$(ts_json_fragment)
+
     local json_line
-    json_line="{\"schema\":\"agent_hook_execution\",\"hook_name\":\"${escaped_hook_name}\",\"hook_version\":\"${escaped_hook_version}\",\"client\":\"${escaped_client}\",\"event_type\":\"${escaped_event_type}\",\"decision\":\"${decision}\",\"deny_reason\":${deny_reason_json},\"duration_bucket\":\"${duration_bucket}\",\"mode\":${mode_json},\"mount_count\":${mount_count_json}}"
+    json_line="{\"schema\":\"agent_hook_execution\",\"hook_name\":\"${escaped_hook_name}\",\"hook_version\":\"${escaped_hook_version}\",\"client\":\"${escaped_client}\",\"event_type\":\"${escaped_event_type}\",\"decision\":\"${decision}\",\"deny_reason\":${deny_reason_json},\"duration_bucket\":\"${duration_bucket}\",\"mode\":${mode_json},\"mount_count\":${mount_count_json}${ts_field}}"
 
     write_telemetry_event "$json_line"
 }
@@ -161,8 +175,11 @@ write_install_event() {
     escaped_hook_name=$(escape_json_string "$hook_name")
     escaped_hook_version=$(escape_json_string "$hook_version")
 
+    local ts_field
+    ts_field=$(ts_json_fragment)
+
     local json_line
-    json_line="{\"schema\":\"agent_hook_install\",\"client\":\"${escaped_client}\",\"hook_name\":\"${escaped_hook_name}\",\"hook_version\":\"${escaped_hook_version}\",\"install_method\":\"${install_method}\"}"
+    json_line="{\"schema\":\"agent_hook_install\",\"client\":\"${escaped_client}\",\"hook_name\":\"${escaped_hook_name}\",\"hook_version\":\"${escaped_hook_version}\",\"install_method\":\"${install_method}\"${ts_field}}"
 
     write_telemetry_event "$json_line"
 }

@@ -124,7 +124,8 @@ create_consent_signal() {
     # Create a file just over 1MB
     dd if=/dev/zero of="$event_file" bs=1048577 count=1 2>/dev/null
     write_telemetry_event '{"should":"not appear"}'
-    # File should still be ~1MB, not have our line appended
+    # File is at the cap, so the new line is skipped (drop-newest) — never
+    # rewritten — leaving the existing contents untouched.
     ! grep -q "should" "$event_file"
 }
 
@@ -168,6 +169,10 @@ create_consent_signal() {
     [[ "$line" != *'"duration_ms"'* ]]
     [[ "$line" == *'"mode":"configured"'* ]]
     [[ "$line" == *'"mount_count":3'* ]]
+    # ts stamps when the hook fired; OPH maps it to the Snowplow device-created
+    # timestamp. Must be an unquoted integer so it parses as a JSON number.
+    [[ "$line" =~ \"ts\":[0-9]+ ]]
+    [[ "$line" != *'"ts":"'* ]]
 }
 
 @test "write_execution_event: deny_reason is set when provided" {
@@ -279,6 +284,12 @@ create_consent_signal() {
     [[ "$line" == *'"hook_name":"validate_mounted_env_files"'* ]]
     [[ "$line" == *'"hook_version":"1.0.0"'* ]]
     [[ "$line" == *'"install_method":"install_script"'* ]]
+    [[ "$line" =~ \"ts\":[0-9]+ ]]
+    [[ "$line" != *'"ts":"'* ]]
+    # JSON must be parseable with the ts field present.
+    if command -v python3 >/dev/null 2>&1; then
+        echo "$line" | python3 -c 'import sys, json; json.loads(sys.stdin.read())'
+    fi
 }
 
 # ========== emit_manual_install_event_once ==========
