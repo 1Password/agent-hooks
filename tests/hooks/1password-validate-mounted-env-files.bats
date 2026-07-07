@@ -244,7 +244,7 @@ TOML
     run env HOME="$home" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
 
     [[ $status -eq 0 ]]
-    [[ "$output" == '{"decision":"allow","message":""}' ]]
+    [[ "$output" == '{"decision":"allow","message":"","mode":"default","mount_count":0,"deny_reason":null}' ]]
 }
 
 @test "fails open (allow) when the 1Password database cannot be queried" {
@@ -264,7 +264,7 @@ TOML
     run env HOME="$home" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
 
     [[ $status -eq 0 ]]
-    [[ "$output" == '{"decision":"allow","message":""}' ]]
+    [[ "$output" == '{"decision":"allow","message":"","mode":"default","mount_count":0,"deny_reason":null}' ]]
 }
 
 @test "denies TOML-required mounts even when no 1Password database is present" {
