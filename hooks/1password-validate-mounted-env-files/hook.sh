@@ -424,9 +424,15 @@ db_path=""
 mount_hex_data=""
 
 if [[ "$os_type" != "unknown" ]]; then
-    db_path=$(find_1password_db "$os_type")
+    # find_1password_db and query_mounts return non-zero as a normal "not found /
+    # unavailable" signal (e.g. no 1Password desktop database on disk, or sqlite3
+    # not installed). Under `set -euo pipefail`, a non-zero command substitution in
+    # an assignment aborts the whole script — which would skip the fail-open logic
+    # below and crash instead of allowing. Guard with `|| true` so we fall through
+    # to the existing emptiness checks and fail open as designed.
+    db_path=$(find_1password_db "$os_type") || true
     if [[ -n "$db_path" ]]; then
-        mount_hex_data=$(query_mounts "$db_path")
+        mount_hex_data=$(query_mounts "$db_path") || true
     fi
 fi
 
