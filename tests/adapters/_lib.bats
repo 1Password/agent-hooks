@@ -46,3 +46,17 @@ setup() {
     result=$(build_canonical_input "cursor" "before_shell_execution" "command" '[]' "/tmp" "ls" "" "$payload")
     [[ "$result" == *'"raw_payload": {"command": "ls"}'* ]]
 }
+
+# ========== build_canonical_input — file_path (9th, optional) ==========
+
+@test "build_canonical_input defaults file_path to empty string when omitted" {
+    local result
+    result=$(build_canonical_input "cursor" "before_shell_execution" "command" '[]' "/tmp" "ls" "" "{}")
+    [[ "$result" == *'"file_path": ""'* ]]
+}
+
+@test "build_canonical_input includes a supplied file_path" {
+    local result
+    result=$(build_canonical_input "claude-code" "before_file_read" "file_read" '[]' "/tmp" "" "Read" "{}" "/tmp/.env")
+    [[ "$result" == *'"file_path": "/tmp/.env"'* ]]
+}

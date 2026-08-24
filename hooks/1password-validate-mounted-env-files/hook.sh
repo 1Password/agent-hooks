@@ -17,6 +17,7 @@ source "${REPO_ROOT}/lib/logging.sh"
 # - 1Password Database Functions (finding and querying database)
 # - Mount Parsing & Validation Functions (parsing mount data, validation)
 # - TOML Parsing Functions
+# - Single-File Validation (for non-shell file-tool events, e.g. Read/Edit)
 # - Main Execution Logic (canonical JSON from stdin)
 # - Permission Decision Logic
 #
@@ -369,6 +370,151 @@ parse_toml_mount_paths() {
     return 1
 }
 
+# ============================================================================
+# SINGLE-FILE VALIDATION
+# ============================================================================
+#
+# Used for non-shell file-tool events (canonical type "file_read", e.g.
+# Claude Code's Read/Edit/MultiEdit/NotebookEdit matchers). Unlike the
+# command path above — which validates every mount discovered for a
+# workspace root before any Bash command runs — a file-tool event only
+# touches one specific path, so we only need to know whether *that* path
+# is a known 1Password mount:
+#   - Not a known mount (or outside every workspace root) -> allow, no-op.
+#   - A known mount -> run the same enabled/exists/FIFO checks as the
+#     command path, appending to the same disabled_mounts/invalid_mounts
+#     arrays so the existing permission-decision logic below handles both
+#     paths uniformly.
+#
+# Expects the caller to have already populated $mount_hex_data (queried
+# once, shared with the command path).
+
+# Check a single file path against a workspace's environments.toml
+# mount_paths (if configured). Echoes the matching resolved mount path on
+# stdout when found, otherwise nothing. Returns 0 always (absence is not
+# an error).
+find_toml_mount_match() {
+    local normalized_file_path="$1"
+    local workspace_root="$2"
+
+    local toml_file="${workspace_root}/.1password/environments.toml"
+    [[ -f "$toml_file" ]] || return 0
+    has_toml_mount_paths_field "$toml_file" || return 0
+
+    local toml_mounts
+    toml_mounts=$(parse_toml_mount_paths "$toml_file") || return 0
+    [[ -z "$toml_mounts" ]] && return 0
+
+    local toml_mount_path resolved_path
+    while IFS= read -r toml_mount_path || [[ -n "$toml_mount_path" ]]; do
+        [[ -z "$toml_mount_path" ]] && continue
+        validate_path "$toml_mount_path" || continue
+
+        if [[ "$toml_mount_path" == /* ]]; then
+            resolved_path="$toml_mount_path"
+        else
+            resolved_path="${workspace_root}/${toml_mount_path}"
+        fi
+        resolved_path=$(normalize_path "$resolved_path")
+
+        if [[ "$resolved_path" == "$normalized_file_path" ]]; then
+            echo "$resolved_path"
+            return 0
+        fi
+    done <<< "$toml_mounts"
+
+    return 0
+}
+
+# Validate a single file path (from a non-shell file-tool event) against
+# known 1Password mounts. Appends to disabled_mounts/invalid_mounts/
+# required_mounts and increments total_mount_count exactly like the
+# per-workspace-root command validation loop, but only for this one path.
+check_single_file_mount() {
+    local file_path="$1"
+    shift
+    local workspace_roots=("$@")
+
+    local normalized_file_path
+    normalized_file_path=$(normalize_path "$file_path")
+
+    # Find the workspace root (if any) that this file belongs to.
+    local matched_workspace=""
+    for workspace_root in "${workspace_roots[@]}"; do
+        if is_project_mount "$normalized_file_path" "$workspace_root"; then
+            matched_workspace="$workspace_root"
+            break
+        fi
+    done
+
+    if [[ -z "$matched_workspace" ]]; then
+        log "File path is outside all workspace roots, skipping validation: \"${normalized_file_path}\""
+        return 0
+    fi
+
+    local is_known_mount=false
+
+    # Known via environments.toml mount_paths?
+    if [[ -n "$(find_toml_mount_match "$normalized_file_path" "$matched_workspace")" ]]; then
+        is_known_mount=true
+    fi
+
+    # Known via the 1Password database?
+    local db_found=false db_is_enabled="" db_environment_name=""
+    if [[ -n "$mount_hex_data" ]]; then
+        local hex_line mount_info mount_path remaining mount_is_enabled mount_env_name normalized_db_path
+        while IFS= read -r hex_line || [[ -n "$hex_line" ]]; do
+            [[ -z "$hex_line" ]] && continue
+
+            mount_info=$(parse_mount "$hex_line")
+            [[ -z "$mount_info" ]] && continue
+
+            mount_path="${mount_info%%|*}"
+            remaining="${mount_info#*|}"
+            mount_is_enabled="${remaining%%|*}"
+            remaining="${remaining#*|}"
+            mount_env_name="${remaining%%|*}"
+
+            normalized_db_path=$(normalize_path "$mount_path")
+            if [[ "$normalized_db_path" == "$normalized_file_path" ]]; then
+                db_found=true
+                db_is_enabled="$mount_is_enabled"
+                db_environment_name="$mount_env_name"
+                is_known_mount=true
+                break
+            fi
+        done <<< "$mount_hex_data"
+    fi
+
+    if [[ "$is_known_mount" != "true" ]]; then
+        log "File path does not match a known 1Password mount, allowing: \"${normalized_file_path}\""
+        return 0
+    fi
+
+    ((total_mount_count++)) || true
+
+    # Disabled in the 1Password app.
+    if [[ "$db_found" == "true" ]] && [[ "$db_is_enabled" == "false" ]]; then
+        log "File being accessed is a disabled local .env mount: \"${normalized_file_path}\""
+        disabled_mounts+=("${normalized_file_path}|${db_environment_name}")
+        return 0
+    fi
+
+    # Missing or not a valid FIFO.
+    if [[ ! -e "$normalized_file_path" ]] || [[ ! -p "$normalized_file_path" ]]; then
+        log "File being accessed is a missing or invalid local .env mount: \"${normalized_file_path}\""
+        if [[ "$db_found" == "true" ]]; then
+            invalid_mounts+=("${normalized_file_path}|${db_environment_name}")
+        else
+            required_mounts+=("$normalized_file_path")
+        fi
+        return 0
+    fi
+
+    log "File being accessed is a valid, enabled local .env mount: \"${normalized_file_path}\""
+    return 0
+}
+
 # Emit one JSON line to stdout (decision, message, and telemetry metadata).
 output_decision() {
     if [[ "$permission" == "allow" ]]; then
@@ -430,8 +576,23 @@ if [[ "$os_type" != "unknown" ]]; then
     fi
 fi
 
-# Process each workspace root
-for workspace_root in "${workspace_roots_array[@]}"; do
+# Non-shell file-tool events (canonical type "file_read", e.g. Claude Code's
+# Read/Edit/MultiEdit/NotebookEdit matchers) validate a single file_path
+# instead of sweeping every mount in the workspace — see "SINGLE-FILE
+# VALIDATION" above.
+canonical_type=$(extract_json_string "$canonical_input" "type")
+canonical_file_path=$(extract_json_string "$canonical_input" "file_path")
+
+if [[ "$canonical_type" == "file_read" ]]; then
+    if [[ -z "$canonical_file_path" ]]; then
+        log "file_read event with no file_path supplied, skipping validation"
+    else
+        log "Validating single file path for file_read event: \"${canonical_file_path}\""
+        check_single_file_mount "$canonical_file_path" "${workspace_roots_array[@]}"
+    fi
+else
+    # Process each workspace root
+    for workspace_root in "${workspace_roots_array[@]}"; do
     log "Processing workspace root: $workspace_root"
 
     # Check for TOML configuration at this workspace root
@@ -626,7 +787,8 @@ for workspace_root in "${workspace_roots_array[@]}"; do
             fi
         done <<< "$mount_hex_data"
     fi
-done
+    done
+fi
 
 # ============================================================================
 # PERMISSION DECISION LOGIC

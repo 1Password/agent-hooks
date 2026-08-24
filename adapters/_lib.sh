@@ -65,7 +65,9 @@ detect_client() {
 
 # Build canonical JSON from extracted fields.
 # Embeds raw_payload as a nested JSON object.
-# Usage: build_canonical_input "$ide" "$event" "$type" "$workspace_roots_json_array" "$cwd" "$command" "$tool_name" "$raw_payload"
+# Usage: build_canonical_input "$ide" "$event" "$type" "$workspace_roots_json_array" "$cwd" "$command" "$tool_name" "$raw_payload" ["$file_path"]
+# file_path is optional (defaults to "") — only non-shell file-tool adapters (e.g.
+# Claude Code's Read/Edit/MultiEdit/NotebookEdit matchers) need to pass it.
 build_canonical_input() {
     local client="$1"
     local event="$2"
@@ -75,16 +77,18 @@ build_canonical_input() {
     local command="$6"
     local tool_name="$7"
     local raw_payload="$8"
+    local file_path="${9:-}"
 
     local escaped_client escaped_event escaped_type
     escaped_client=$(escape_json_string "$client")
     escaped_event=$(escape_json_string "$event")
     escaped_type=$(escape_json_string "$type")
 
-    local escaped_cwd escaped_command escaped_tool_name
+    local escaped_cwd escaped_command escaped_tool_name escaped_file_path
     escaped_cwd=$(escape_json_string "$cwd")
     escaped_command=$(escape_json_string "$command")
     escaped_tool_name=$(escape_json_string "$tool_name")
+    escaped_file_path=$(escape_json_string "$file_path")
 
     local trimmed_payload
     trimmed_payload=$(printf '%s' "$raw_payload" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
@@ -103,6 +107,7 @@ build_canonical_input() {
 "cwd": "${escaped_cwd}",
 "command": "${escaped_command}",
 "tool_name": "${escaped_tool_name}",
+"file_path": "${escaped_file_path}",
 "raw_payload": ${trimmed_payload}
 }
 CANONICAL_EOF

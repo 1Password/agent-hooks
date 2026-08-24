@@ -9,6 +9,15 @@
             "command": "bin/run-hook.sh 1password-validate-mounted-env-files"
           }
         ]
+      },
+      {
+        "matcher": "Read|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bin/run-hook.sh 1password-validate-mounted-env-files"
+          }
+        ]
       }
     ]
   }

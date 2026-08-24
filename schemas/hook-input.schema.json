@@ -14,13 +14,13 @@
     },
     "event": {
       "type": "string",
-      "enum": ["before_shell_execution"],
-      "description": "Canonical event name. Currently only 'before_shell_execution' is supported."
+      "enum": ["before_shell_execution", "before_file_read"],
+      "description": "Canonical event name. 'before_shell_execution' covers shell/command execution. 'before_file_read' covers non-shell file tools (e.g. Read, Edit, MultiEdit, NotebookEdit on Claude Code)."
     },
     "type": {
       "type": "string",
-      "enum": ["command"],
-      "description": "Action category as defined by the IDE's hook system. Currently only 'command' (shell execution) is supported."
+      "enum": ["command", "file_read"],
+      "description": "Action category as defined by the IDE's hook system. 'command' is shell execution. 'file_read' is a non-shell file-tool action (open/edit/inspect a file path) that pairs with the 'before_file_read' event."
     },
     "workspace_roots": {
       "type": "array",
@@ -36,12 +36,17 @@
     },
     "command": {
       "type": "string",
-      "description": "Shell command string about to be executed."
+      "description": "Shell command string about to be executed. Empty string for non-shell events (e.g. 'before_file_read')."
     },
     "tool_name": {
       "type": "string",
       "default": "",
-      "description": "IDE tool identifier from the payload (e.g. 'Bash', 'run_in_terminal'). Empty string when not applicable."
+      "description": "IDE tool identifier from the payload (e.g. 'Bash', 'run_in_terminal', 'Read'). Empty string when not applicable."
+    },
+    "file_path": {
+      "type": "string",
+      "default": "",
+      "description": "Absolute (or IDE-provided) path to the file being read/edited/inspected, for non-shell file-tool events (e.g. Read, Edit, MultiEdit, NotebookEdit on Claude Code). Empty string for shell-command events or when not applicable."
     },
     "raw_payload": {
       "type": "object",

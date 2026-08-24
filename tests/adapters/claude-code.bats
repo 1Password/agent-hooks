@@ -73,6 +73,72 @@ setup() {
     [[ "$result" == *"/home/user/project"* ]]
 }
 
+# ========== normalize_input — non-Bash file tools (Read/Edit/MultiEdit/NotebookEdit) ==========
+
+@test "normalize_input sets event to before_file_read for Read tool" {
+    local payload='{"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/tmp/.env"}, "cwd": "/tmp", "permission_mode": "default"}'
+    result=$(normalize_input "$payload")
+    local event
+    event=$(echo "$result" | grep -oE '"event"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"\(.*\)"/\1/')
+    [[ "$event" == "before_file_read" ]]
+}
+
+@test "normalize_input sets type to file_read for Read tool" {
+    local payload='{"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/tmp/.env"}, "cwd": "/tmp", "permission_mode": "default"}'
+    result=$(normalize_input "$payload")
+    local type
+    type=$(echo "$result" | grep -oE '"type"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"\(.*\)"/\1/')
+    [[ "$type" == "file_read" ]]
+}
+
+@test "normalize_input extracts file_path for Read tool" {
+    local payload='{"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/tmp/.env"}, "cwd": "/tmp", "permission_mode": "default"}'
+    result=$(normalize_input "$payload")
+    local file_path
+    file_path=$(echo "$result" | grep -oE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"\(.*\)"/\1/')
+    [[ "$file_path" == "/tmp/.env" ]]
+}
+
+@test "normalize_input leaves command empty for Read tool" {
+    local payload='{"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/tmp/.env"}, "cwd": "/tmp", "permission_mode": "default"}'
+    result=$(normalize_input "$payload")
+    local command
+    command=$(echo "$result" | grep -oE '"command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"\(.*\)"/\1/')
+    [[ "$command" == "" ]]
+}
+
+@test "normalize_input extracts file_path for Edit tool" {
+    local payload='{"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": {"file_path": "/tmp/.env", "old_string": "a", "new_string": "b"}, "cwd": "/tmp", "permission_mode": "default"}'
+    result=$(normalize_input "$payload")
+    local file_path
+    file_path=$(echo "$result" | grep -oE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"\(.*\)"/\1/')
+    [[ "$file_path" == "/tmp/.env" ]]
+}
+
+@test "normalize_input extracts file_path for MultiEdit tool" {
+    local payload='{"hook_event_name": "PreToolUse", "tool_name": "MultiEdit", "tool_input": {"file_path": "/tmp/.env", "edits": []}, "cwd": "/tmp", "permission_mode": "default"}'
+    result=$(normalize_input "$payload")
+    local file_path
+    file_path=$(echo "$result" | grep -oE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"\(.*\)"/\1/')
+    [[ "$file_path" == "/tmp/.env" ]]
+}
+
+@test "normalize_input falls back to notebook_path for NotebookEdit tool" {
+    local payload='{"hook_event_name": "PreToolUse", "tool_name": "NotebookEdit", "tool_input": {"notebook_path": "/tmp/notebook.ipynb", "new_source": "x"}, "cwd": "/tmp", "permission_mode": "default"}'
+    result=$(normalize_input "$payload")
+    local file_path
+    file_path=$(echo "$result" | grep -oE '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"\(.*\)"/\1/')
+    [[ "$file_path" == "/tmp/notebook.ipynb" ]]
+}
+
+@test "normalize_input preserves tool_name for file tools" {
+    local payload='{"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {"file_path": "/tmp/.env"}, "cwd": "/tmp", "permission_mode": "default"}'
+    result=$(normalize_input "$payload")
+    local tool_name
+    tool_name=$(echo "$result" | grep -oE '"tool_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"\(.*\)"/\1/')
+    [[ "$tool_name" == "Read" ]]
+}
+
 # ========== emit_output ==========
 
 @test "emit_output exits 0 and produces no stdout for allow" {

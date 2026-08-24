@@ -16,6 +16,8 @@ Use with the event that runs before shell command execution in your agent. When 
 
 **Examples (event name depends on your agent):** `beforeShellExecution` (e.g. Cursor), `PreToolUse` (e.g. GitHub Copilot).
 
+On Claude Code, `PreToolUse` also supports non-Bash file tools (`Read`, `Edit`, `MultiEdit`, `NotebookEdit`). Registering the hook for those matchers (see [Example Configuration](#example-configuration)) catches the case where the agent inspects a `.env` mount directly via a file tool instead of a shell command — otherwise that access bypasses validation entirely. For these events, the hook validates only the specific file path being accessed (not every mount in the workspace): if the path isn't a known 1Password mount, it's allowed with no further checks.
+
 ## Functionality
 
 The hook supports two validation modes: **configured** (when a TOML configuration file is present and properly defined) and **default** (when no configuration is provided).
@@ -130,6 +132,29 @@ The command must run `run-hook.sh` with the hook name. The path to `run-hook.sh`
 ```
 
 For other agents, use the event and config path for your agent. See [.github/hooks/hooks.json](../../.github/hooks/hooks.json) in this repo for another example.
+
+Claude Code (`.claude/settings.json`) registers the hook against both `Bash` and the non-Bash file-tool matchers so file-tool access to a mounted `.env` is validated too:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "claude-code-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files" }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "claude-code-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files" }
+        ]
+      }
+    ]
+  }
+}
+```
 
 ### Dependencies
 
