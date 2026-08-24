@@ -30,7 +30,24 @@ Use the `--agent` value when running the install script:
 
 | Hook | Installation |
 |------|--------------|
-| [`1password-validate-mounted-env-files`](./hooks/1password-validate-mounted-env-files/README.md) — validates mounted `.env` files from 1Password Environments | <ul><li><strong>Cursor:</strong> <a href="https://cursor.com/marketplace/1password">1Password plugin</a> (e.g. <code>/add-plugin 1password</code>); or <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent cursor</code>).</li><li><strong>Claude Code:</strong> <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent claude-code</code>).</li><li><strong>GitHub Copilot:</strong> <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent github-copilot</code>).</li><li><strong>Windsurf (Cascade):</strong> <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent windsurf</code>).</li></ul> |
+| [`1password-validate-mounted-env-files`](./hooks/1password-validate-mounted-env-files/README.md) — validates mounted `.env` files from 1Password Environments | <ul><li><strong>Cursor:</strong> <a href="https://cursor.com/marketplace/1password">1Password plugin</a> (e.g. <code>/add-plugin 1password</code>); or <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent cursor</code>).</li><li><strong>Claude Code:</strong> <a href="#claude-code-plugin-recommended">1Password Claude Code plugin</a> (e.g. <code>/plugin install 1password@agent-hooks</code>); or <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent claude-code</code>).</li><li><strong>GitHub Copilot:</strong> <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent github-copilot</code>).</li><li><strong>Windsurf (Cascade):</strong> <a href="#installation">Installation</a> with <code>install.sh</code> (<code>--agent windsurf</code>).</li></ul> |
+
+## Claude Code plugin (recommended)
+
+Claude Code users can install the `1password-validate-mounted-env-files` hook as a proper [Claude Code plugin](https://code.claude.com/docs/en/plugins), distributed from this repo's [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json). This is the recommended way to install for Claude Code, and replaces the copy-paste bundle described in [Installation](#installation) below for that agent:
+
+```
+/plugin marketplace add 1Password/agent-hooks
+/plugin install 1password@agent-hooks
+```
+
+Why this is better than the `install.sh --agent claude-code` bundle:
+
+- **Auto-updates.** The bundle approach vendors a static copy of `bin/`, `lib/`, `adapters/`, and `hooks/` into your project's `.claude/` directory with no update mechanism — fixes and new hooks never reach you unless you manually re-run `install.sh`. The plugin is managed by Claude Code's plugin system and updates when you run `/plugin marketplace update` (or automatically, depending on your settings).
+- **Reliable path resolution.** The bundle's generated `.claude/settings.json` entry uses a path relative to the project root, which breaks with a "No such file or directory" hook error when Claude Code executes hooks from a non-root working directory. The plugin's [`hooks/hooks.json`](hooks/hooks.json) uses `${CLAUDE_PLUGIN_ROOT}`, which Claude Code resolves to an absolute path reliably regardless of the session's current working directory.
+- **No per-project vendoring.** Nothing is copied into your repo's `.claude/` directory, so there's nothing to commit or drift.
+
+If you'd rather not use the plugin system (e.g. to pin an exact vendored copy, or your Claude Code version doesn't support plugins), the `install.sh --agent claude-code` flow in [Installation](#installation) below still works and is unaffected by this option.
 
 ## Installation
 

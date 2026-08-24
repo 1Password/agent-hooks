@@ -1,0 +1,20 @@
+{
+  "name": "1password",
+  "displayName": "1Password Agent Hooks",
+  "version": "1.0.0",
+  "description": "Validates 1Password Environments mounted .env files before Claude Code runs Bash commands.",
+  "author": {
+    "name": "1Password",
+    "url": "https://github.com/1Password"
+  },
+  "homepage": "https://github.com/1Password/agent-hooks",
+  "repository": "https://github.com/1Password/agent-hooks",
+  "license": "MIT",
+  "keywords": [
+    "1password",
+    "secrets",
+    "environments",
+    "hooks",
+    "validation"
+  ]
+}

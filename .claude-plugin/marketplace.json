@@ -1,0 +1,22 @@
+{
+  "name": "agent-hooks",
+  "owner": {
+    "name": "1Password",
+    "url": "https://github.com/1Password"
+  },
+  "description": "1Password agent hooks for AI coding agents (Claude Code, Cursor, GitHub Copilot, Windsurf).",
+  "plugins": [
+    {
+      "name": "1password",
+      "source": "./",
+      "description": "Validates 1Password Environments mounted .env files before Claude Code runs Bash commands.",
+      "version": "1.0.0",
+      "author": {
+        "name": "1Password",
+        "url": "https://github.com/1Password"
+      },
+      "license": "MIT",
+      "homepage": "https://github.com/1Password/agent-hooks"
+    }
+  ]
+}
