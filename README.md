@@ -34,7 +34,7 @@ Use the `--agent` value when running the install script:
 
 ## Claude Code plugin (recommended)
 
-Claude Code users can install the `1password-validate-mounted-env-files` hook as a proper [Claude Code plugin](https://code.claude.com/docs/en/plugins), distributed from this repo's [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json). This is the recommended way to install for Claude Code, and replaces the copy-paste bundle described in [Installation](#installation) below for that agent:
+Claude Code users can install the `1password-validate-mounted-env-files` hook as a proper [Claude Code plugin](https://code.claude.com/docs/en/plugins), distributed from this repo's [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json). This is the recommended way to install for Claude Code, in place of the copy-paste bundle described in [Installation](#installation) below for that agent:
 
 ```
 /plugin marketplace add 1Password/agent-hooks
