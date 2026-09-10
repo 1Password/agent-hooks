@@ -4,20 +4,41 @@ load "../test_helper"
 
 HOOK_SCRIPT="${PROJECT_ROOT}/hooks/1password-validate-mounted-env-files/hook.sh"
 
+# Per-OS 1Password data directory under a given home (mirrors the primary
+# paths find_1password_db searches).
+_1password_data_dir() {
+    local home="$1"
+    case "$(uname -s)" in
+        Darwin*)
+            echo "${home}/Library/Group Containers/2BUA8C4S2C.com.1password/Library/Application Support/1Password/Data"
+            ;;
+        *)
+            echo "${home}/.config/1Password"
+            ;;
+    esac
+}
+
 # Minimal SQLite DB at the path find_1password_db expects; query_mounts requires objects_associated.
 create_minimal_1password_sqlite_fixture() {
     local fake_home="$1"
     local db_path
-    case "$(uname -s)" in
-        Darwin*)
-            db_path="${fake_home}/Library/Group Containers/2BUA8C4S2C.com.1password/Library/Application Support/1Password/Data/1Password.sqlite"
-            ;;
-        *)
-            db_path="${fake_home}/.config/1Password/1Password.sqlite"
-            ;;
-    esac
+    db_path="$(_1password_data_dir "$fake_home")/1Password.sqlite"
     mkdir -p "$(dirname "$db_path")"
     sqlite3 "$db_path" 'CREATE TABLE objects_associated (key_name TEXT, data BLOB);'
+}
+
+# Build a canonical-input payload for one workspace root (python3 for
+# JSON-safe escaping of tmpdir paths).
+_canonical_for_root() {
+    python3 -c "import json,sys; print(json.dumps({
+        'client': 'cursor',
+        'event': 'before_shell_execution',
+        'type': 'command',
+        'workspace_roots': [sys.argv[1]],
+        'cwd': sys.argv[1],
+        'command': 'echo hi',
+        'raw_payload': {},
+    }))" "$1"
 }
 
 canonical_empty_roots='{"client":"cursor","event":"before_shell_execution","type":"command","workspace_roots":[],"cwd":"","command":"echo hi","raw_payload":{}}'
@@ -50,18 +71,7 @@ canonical_one_root='{"client":"cursor","event":"before_shell_execution","type":"
     mkdir -p "$ws/.1password"
     printf '%s\n' 'mount_paths = [".env.missing"]' > "$ws/.1password/environments.toml"
 
-    local payload
-    payload=$(python3 -c "import json,sys; print(json.dumps({
-        'client': 'cursor',
-        'event': 'before_shell_execution',
-        'type': 'command',
-        'workspace_roots': [sys.argv[1]],
-        'cwd': sys.argv[1],
-        'command': 'echo hi',
-        'raw_payload': {},
-    }))" "$ws")
-
-    run env HOME="$HOME" bash "$HOOK_SCRIPT" <<<"$payload"
+    run env HOME="$HOME" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
     [[ $status -eq 1 ]]
     [[ $(printf '%s\n' "$output" | wc -l) -eq 1 ]]
     printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("decision")=="deny" and d.get("message"), d'
@@ -211,5 +221,68 @@ TOML
 
     [[ $status -eq 0 ]]
     assert_lines ".env"
+}
+
+# ============================================================================
+# Regression tests for `set -e` aborts on the 1Password DB lookup
+# ============================================================================
+#
+# find_1password_db and query_mounts return non-zero as a normal "not found /
+# unavailable" signal; the hook must handle that and decide, not abort under
+# `set -euo pipefail` — see the comment above the `|| true` guards in hook.sh.
+# These tests run without sqlite3 (the exact path the `deny` test above skips).
+
+@test "fails open (allow) when no 1Password database is present" {
+    # Regression: db_path=$(find_1password_db ...) returns non-zero when no
+    # database exists on disk.
+    local home="${BATS_TEST_TMPDIR}/home"
+    mkdir -p "$home"   # intentionally no 1Password sqlite database
+
+    local ws="${BATS_TEST_TMPDIR}/workspace"
+    mkdir -p "$ws"     # no .1password/environments.toml -> default mode
+
+    run env HOME="$home" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
+
+    [[ $status -eq 0 ]]
+    [[ "$output" == '{"decision":"allow","message":"","mode":"default","mount_count":0,"deny_reason":null}' ]]
+}
+
+@test "fails open (allow) when the 1Password database cannot be queried" {
+    # Regression: mount_hex_data=$(query_mounts ...) returns non-zero when
+    # sqlite3 is missing or the database is invalid/unreadable. A
+    # present-but-invalid db file reaches query_mounts and forces the
+    # non-zero path regardless of whether sqlite3 is installed.
+    local home="${BATS_TEST_TMPDIR}/home"
+    local db_dir
+    db_dir="$(_1password_data_dir "$home")"
+    mkdir -p "$db_dir"
+    printf 'not-a-valid-sqlite-database' > "${db_dir}/1Password.sqlite"
+
+    local ws="${BATS_TEST_TMPDIR}/workspace"
+    mkdir -p "$ws"
+
+    run env HOME="$home" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
+
+    [[ $status -eq 0 ]]
+    [[ "$output" == '{"decision":"allow","message":"","mode":"default","mount_count":0,"deny_reason":null}' ]]
+}
+
+@test "denies TOML-required mounts even when no 1Password database is present" {
+    # Pins configured-mode deny on machines without the desktop database —
+    # the behavior the `|| true` guards make reachable. Before the fix the
+    # hook aborted before validating, so a required-but-missing mount could
+    # never block on these machines.
+    local home="${BATS_TEST_TMPDIR}/home"
+    mkdir -p "$home"   # intentionally no 1Password sqlite database
+
+    local ws="${BATS_TEST_TMPDIR}/workspace"
+    mkdir -p "$ws/.1password"
+    printf '%s\n' 'mount_paths = [".env.missing"]' > "$ws/.1password/environments.toml"
+
+    run env HOME="$home" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
+
+    [[ $status -eq 1 ]]
+    [[ $(printf '%s\n' "$output" | wc -l) -eq 1 ]]
+    printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("decision")=="deny" and d.get("message"), d'
 }
 
