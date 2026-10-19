@@ -64,11 +64,18 @@ find_1password_db() {
             "${home_path}/Library/Group Containers/2BUA8C4S2C.com.1password/Library/Application Support/1Password/Data/1Password.sqlite"
         )
     elif [[ "$os_type" == "unix" ]]; then
-        db_paths=(
-            "${home_path}/.config/1Password/1Password.sqlite"
-            "${home_path}/snap/1password/current/.config/1Password/1Password.sqlite"
-            "${home_path}/.var/app/com.onepassword.OnePassword/config/1Password/1Password.sqlite"
+        # The Linux app writes 1password.sqlite (lowercase p). Linux filesystems are
+        # case-sensitive, so probe that name first in each location and keep the
+        # capitalised name as a fallback.
+        local linux_dirs=(
+            "${home_path}/.config/1Password"
+            "${home_path}/snap/1password/current/.config/1Password"
+            "${home_path}/.var/app/com.onepassword.OnePassword/config/1Password"
         )
+        local dir
+        for dir in "${linux_dirs[@]}"; do
+            db_paths+=("${dir}/1password.sqlite" "${dir}/1Password.sqlite")
+        done
     fi
 
     for db_path in "${db_paths[@]}"; do

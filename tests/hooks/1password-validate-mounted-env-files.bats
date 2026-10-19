@@ -81,6 +81,59 @@ canonical_one_root='{"client":"cursor","event":"before_shell_execution","type":"
 }
 
 # ============================================================================
+# 1Password database lookup tests (find_1password_db)
+# ============================================================================
+
+setup_db_lookup_tests() {
+    eval "$(_extract_func find_1password_db "${HOOK_SCRIPT}")"
+
+    export HOME="${BATS_TEST_TMPDIR}/home"
+    DB_DIR="${HOME}/.config/1Password"
+    mkdir -p "$DB_DIR"
+}
+
+# 1password.sqlite and 1Password.sqlite are the same file on case-insensitive
+# filesystems (macOS default), so tests that need them distinct only run on Linux.
+skip_if_case_insensitive_fs() {
+    touch "${BATS_TEST_TMPDIR}/case_probe"
+    if [[ -e "${BATS_TEST_TMPDIR}/CASE_PROBE" ]]; then
+        skip "filesystem is case-insensitive"
+    fi
+}
+
+@test "find_1password_db finds lowercase 1password.sqlite" {
+    setup_db_lookup_tests
+    touch "${DB_DIR}/1password.sqlite"
+
+    run find_1password_db unix
+
+    [[ $status -eq 0 ]]
+    [[ "$output" == "${DB_DIR}/1password.sqlite" ]]
+}
+
+@test "find_1password_db falls back to 1Password.sqlite" {
+    setup_db_lookup_tests
+    skip_if_case_insensitive_fs
+    touch "${DB_DIR}/1Password.sqlite"
+
+    run find_1password_db unix
+
+    [[ $status -eq 0 ]]
+    [[ "$output" == "${DB_DIR}/1Password.sqlite" ]]
+}
+
+@test "find_1password_db prefers 1password.sqlite when both exist" {
+    setup_db_lookup_tests
+    skip_if_case_insensitive_fs
+    touch "${DB_DIR}/1Password.sqlite" "${DB_DIR}/1password.sqlite"
+
+    run find_1password_db unix
+
+    [[ $status -eq 0 ]]
+    [[ "$output" == "${DB_DIR}/1password.sqlite" ]]
+}
+
+# ============================================================================
 # TOML mount_paths parsing tests (extract_toml_array_items / parse_toml_mount_paths)
 # ============================================================================
 
