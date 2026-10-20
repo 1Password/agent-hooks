@@ -80,3 +80,70 @@ setup() {
     source "${LIB_DIR}/logging.sh"
     [[ "$_LIB_LOGGING_LOADED" == "1" ]]
 }
+
+# ---------- log file permissions ----------
+
+# Mirrors the stat idiom already used in lib/telemetry.sh: BSD first, GNU second.
+file_mode() {
+    stat -f%Lp "$1" 2>/dev/null || stat -c%a "$1" 2>/dev/null
+}
+
+@test "log creates a new log file with 0600 permissions" {
+    local logfile="${BATS_TEST_TMPDIR}/fresh.log"
+
+    LOG_FILE="$logfile" log "first line"
+
+    [[ -f "$logfile" ]]
+    [[ "$(file_mode "$logfile")" == "600" ]]
+    grep -q "first line" "$logfile"
+}
+
+@test "log appends to an existing file owned by the caller" {
+    local logfile="${BATS_TEST_TMPDIR}/existing.log"
+    printf 'pre-existing\n' > "$logfile"
+
+    LOG_FILE="$logfile" log "appended line"
+
+    grep -q "pre-existing" "$logfile"
+    grep -q "appended line" "$logfile"
+}
+
+@test "log does not write through a symlink to a regular file" {
+    local target="${BATS_TEST_TMPDIR}/target.txt"
+    local link="${BATS_TEST_TMPDIR}/link.log"
+    printf 'untouched\n' > "$target"
+    ln -s "$target" "$link"
+
+    LOG_FILE="$link" log "must not land here"
+
+    [[ "$(cat "$target")" == "untouched" ]]
+}
+
+@test "log does not create a file through a dangling symlink" {
+    local target="${BATS_TEST_TMPDIR}/not-yet-there.txt"
+    local link="${BATS_TEST_TMPDIR}/dangling.log"
+    ln -s "$target" "$link"
+
+    LOG_FILE="$link" log "must not create the target"
+
+    [[ ! -e "$target" ]]
+}
+
+@test "log still honours LOG_FILE=/dev/null" {
+    # The shared test helper points LOG_FILE at /dev/null to silence logging,
+    # so a permissions check that rejected non-regular files would break every
+    # other test in the suite.
+    LOG_FILE="/dev/null" log "swallowed"
+}
+
+@test "log tightens a world-readable log left by an earlier version" {
+    local logfile="${BATS_TEST_TMPDIR}/legacy.log"
+    printf 'written by an older version\n' > "$logfile"
+    chmod 644 "$logfile"
+
+    LOG_FILE="$logfile" log "new line"
+
+    [[ "$(file_mode "$logfile")" == "600" ]]
+    grep -q "written by an older version" "$logfile"
+    grep -q "new line" "$logfile"
+}
