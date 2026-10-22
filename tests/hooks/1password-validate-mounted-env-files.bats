@@ -224,13 +224,13 @@ TOML
 }
 
 # ============================================================================
-# Regression tests for `set -e` aborts on the 1Password DB lookup
+# Regression tests for `set -e` aborts on expected non-zero returns
 # ============================================================================
 #
-# find_1password_db and query_mounts return non-zero as a normal "not found /
-# unavailable" signal; the hook must handle that and decide, not abort under
-# `set -euo pipefail` — see the comment above the `|| true` guards in hook.sh.
-# These tests run without sqlite3 (the exact path the `deny` test above skips).
+# find_1password_db, query_mounts, parse_toml_mount_paths and parse_mount
+# return non-zero as a normal "not found / can't parse" signal; the hook must
+# handle that and decide, not abort under `set -euo pipefail`. The first three
+# tests run without sqlite3 (the exact path the `deny` test above skips).
 
 @test "fails open (allow) when no 1Password database is present" {
     # Regression: db_path=$(find_1password_db ...) returns non-zero when no
@@ -269,7 +269,7 @@ TOML
 
 @test "denies TOML-required mounts even when no 1Password database is present" {
     # Pins configured-mode deny on machines without the desktop database —
-    # the behavior the `|| true` guards make reachable. Before the fix the
+    # the behavior the guarded assignments make reachable. Before the fix the
     # hook aborted before validating, so a required-but-missing mount could
     # never block on these machines.
     local home="${BATS_TEST_TMPDIR}/home"
@@ -284,5 +284,79 @@ TOML
     [[ $status -eq 1 ]]
     [[ $(printf '%s\n' "$output" | wc -l) -eq 1 ]]
     printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("decision")=="deny" and d.get("message"), d'
+}
+
+# Set up a fixture DB holding one disabled mount at <ws>/.env, so a hook that
+# actually validates it denies with deny_reason "file_disabled". Pass
+# "with_bad_row" to insert an unparseable mount row (no mountPath) first.
+_setup_disabled_mount_fixture() {
+    local home="$1" ws="$2" bad_row="${3:-}"
+    mkdir -p "$home" "$ws"
+    create_minimal_1password_sqlite_fixture "$home"
+
+    local db_path
+    db_path="$(_1password_data_dir "$home")/1Password.sqlite"
+    if [[ "$bad_row" == "with_bad_row" ]]; then
+        sqlite3 "$db_path" "INSERT INTO objects_associated VALUES ('dev-environment-mount/bad', '{\"isEnabled\":false}');"
+    fi
+    sqlite3 "$db_path" "INSERT INTO objects_associated VALUES ('dev-environment-mount/disabled', '{\"mountPath\":\"${ws//\'/\'\'}/.env\",\"isEnabled\":false}');"
+}
+
+_assert_file_disabled_deny() {
+    [[ $status -eq 1 ]]
+    [[ $(printf '%s\n' "$output" | wc -l) -eq 1 ]]
+    printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("decision")=="deny" and d.get("deny_reason")=="file_disabled", d'
+}
+
+@test "falls back to default mode when mount_paths is not an array" {
+    # Regression: toml_mounts=$(parse_toml_mount_paths ...) returns non-zero
+    # when mount_paths is present but not an array, and the old `$? -ne 0`
+    # fallback after it could never run.
+    if ! command -v sqlite3 &>/dev/null; then
+        skip "sqlite3 not available"
+    fi
+
+    local home="${BATS_TEST_TMPDIR}/home"
+    local ws="${BATS_TEST_TMPDIR}/workspace"
+    _setup_disabled_mount_fixture "$home" "$ws"
+    mkdir -p "$ws/.1password"
+    printf '%s\n' 'mount_paths = ".env"' > "$ws/.1password/environments.toml"
+
+    run env HOME="$home" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
+
+    _assert_file_disabled_deny
+}
+
+@test "skips unparseable mount rows in default mode" {
+    # Regression: mount_info=$(parse_mount ...) returns non-zero for a row
+    # with no mountPath; one bad row must not stop the other mounts being checked.
+    if ! command -v sqlite3 &>/dev/null; then
+        skip "sqlite3 not available"
+    fi
+
+    local home="${BATS_TEST_TMPDIR}/home"
+    local ws="${BATS_TEST_TMPDIR}/workspace"
+    _setup_disabled_mount_fixture "$home" "$ws" with_bad_row
+
+    run env HOME="$home" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
+
+    _assert_file_disabled_deny
+}
+
+@test "skips unparseable mount rows in configured mode" {
+    # Same as above, for the parse_mount call in the configured-mode loop.
+    if ! command -v sqlite3 &>/dev/null; then
+        skip "sqlite3 not available"
+    fi
+
+    local home="${BATS_TEST_TMPDIR}/home"
+    local ws="${BATS_TEST_TMPDIR}/workspace"
+    _setup_disabled_mount_fixture "$home" "$ws" with_bad_row
+    mkdir -p "$ws/.1password"
+    printf '%s\n' 'mount_paths = [".env"]' > "$ws/.1password/environments.toml"
+
+    run env HOME="$home" bash "$HOOK_SCRIPT" <<<"$(_canonical_for_root "$ws")"
+
+    _assert_file_disabled_deny
 }
 
