@@ -431,9 +431,17 @@ db_path=""
 mount_hex_data=""
 
 if [[ "$os_type" != "unknown" ]]; then
-    db_path=$(find_1password_db "$os_type")
+    # Assign in an `if`: these fail on expected conditions (no database, no sqlite3),
+    # and a bare failing assignment would exit under set -e.
+    if ! db_path=$(find_1password_db "$os_type"); then
+        log "Warning: 1Password database not found"
+        db_path=""
+    fi
     if [[ -n "$db_path" ]]; then
-        mount_hex_data=$(query_mounts "$db_path")
+        # query_mounts logs its own reason for failing.
+        if ! mount_hex_data=$(query_mounts "$db_path"); then
+            mount_hex_data=""
+        fi
     fi
 fi
 
@@ -455,9 +463,9 @@ for workspace_root in "${workspace_roots_array[@]}"; do
             log "environments.toml has mount_paths field defined - validating specified mounts"
 
             # Parse and validate TOML mount paths
-            toml_mounts=$(parse_toml_mount_paths "$toml_file")
-            if [[ $? -ne 0 ]]; then
+            if ! toml_mounts=$(parse_toml_mount_paths "$toml_file"); then
                 log "Warning: Failed to parse environments.toml at ${toml_file}, falling back to default mode"
+                toml_mounts=""
                 use_configured_mode=false
             elif [[ -z "$toml_mounts" ]]; then
                 log "environments.toml specifies mount_paths = [] - no local .env files to validate for this workspace"
@@ -531,7 +539,10 @@ for workspace_root in "${workspace_roots_array[@]}"; do
                     while IFS= read -r hex_line || [[ -n "$hex_line" ]]; do
                         [[ -z "$hex_line" ]] && continue
 
-                        mount_info=$(parse_mount "$hex_line")
+                        if ! mount_info=$(parse_mount "$hex_line"); then
+                            log "Warning: Skipping a mount entry that could not be parsed"
+                            mount_info=""
+                        fi
                         if [[ -n "$mount_info" ]]; then
                             mount_path="${mount_info%%|*}"
                             remaining="${mount_info#*|}"
@@ -597,7 +608,10 @@ for workspace_root in "${workspace_roots_array[@]}"; do
         while IFS= read -r hex_line || [[ -n "$hex_line" ]]; do
             [[ -z "$hex_line" ]] && continue
 
-            mount_info=$(parse_mount "$hex_line")
+            if ! mount_info=$(parse_mount "$hex_line"); then
+                log "Warning: Skipping a mount entry that could not be parsed"
+                mount_info=""
+            fi
             if [[ -n "$mount_info" ]]; then
                 # Parse mount_info: mount_path|is_enabled|environment_name|uuid|environment_uuid
                 mount_path="${mount_info%%|*}"
