@@ -199,6 +199,13 @@ EOF
   [[ $status -eq 0 ]]
 }
 
+@test "claude-code: settings.json command is anchored to CLAUDE_PROJECT_DIR" {
+  run bash "${INSTALL_SCRIPT}" --agent claude-code --target-dir "${T}"
+  [[ $status -eq 0 ]]
+  run grep -Fq '"command": "\"$CLAUDE_PROJECT_DIR\"/.claude/claude-code-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"' "${T}/.claude/settings.json"
+  [[ $status -eq 0 ]]
+}
+
 @test "claude-code: does not overwrite existing settings.json" {
   mkdir -p "${T}/.claude"
   echo '{"hooks":{"PreToolUse":[]}}' > "${T}/.claude/settings.json"

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bin/run-hook.sh 1password-validate-mounted-env-files"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/bin/run-hook.sh 1password-validate-mounted-env-files"
           }
         ]
       }
