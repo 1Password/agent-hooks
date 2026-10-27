@@ -140,7 +140,7 @@ Claude Code — `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "claude-code-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/claude-code-1password-hooks-bundle/bin/run-hook.sh 1password-validate-mounted-env-files"
           }
         ]
       }
